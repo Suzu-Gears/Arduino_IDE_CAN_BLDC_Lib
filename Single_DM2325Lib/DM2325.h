@@ -144,14 +144,31 @@ public:
   }
 
   // send commands (placeholders) - check mode where appropriate
-  void sendMIT() {
-    if (currentMode_ != DM_CM_MIT) return;  // only allowed in MIT
+  bool sendMIT() {
+    if (currentMode_ != DM_CM_MIT) return false;  // only allowed in MIT MODE
     // placeholder: pack and send CAN MIT packet
   }
 
-  void sendPosition(float position_rad, float vel_limit_rad_s) {
-    if (currentMode_ != DM_CM_POSITION) return;  // only allowed in POSITION
-    // placeholder: pack and send position CAN packet
+  bool sendPosition(float position_rad, float vel_limit_rad_s) {
+    if (currentMode_ != DM_CM_POSITION) return false;  // only allowed in POSITION MODE
+
+    CanMsg tx = {};
+    uint32_t position_raw, velocity_raw;
+    ::memcpy(&position_raw, &position_rad, sizeof(position_raw));
+    ::memcpy(&velocity_raw, &vel_limit_rad_s, sizeof(velocity_raw));
+
+    tx.id = 0x100 + slaveId_;  // 位置速度制御用idオフセット0x100
+    tx.data_length = 8;
+    tx.data[0] = static_cast<uint8_t>(position_raw & 0xFF);
+    tx.data[1] = static_cast<uint8_t>((position_raw >> 8) & 0xFF);
+    tx.data[2] = static_cast<uint8_t>((position_raw >> 16) & 0xFF);
+    tx.data[3] = static_cast<uint8_t>((position_raw >> 24) & 0xFF);
+    tx.data[4] = static_cast<uint8_t>(velocity_raw & 0xFF);
+    tx.data[5] = static_cast<uint8_t>((velocity_raw >> 8) & 0xFF);
+    tx.data[6] = static_cast<uint8_t>((velocity_raw >> 16) & 0xFF);
+    tx.data[7] = static_cast<uint8_t>((velocity_raw >> 24) & 0xFF);
+
+    return can_->write(tx) >= 0;
   }
 
   bool sendVelocityRPM(float velocity_rpm) {
@@ -163,13 +180,13 @@ public:
   }
 
   bool sendVelocity(float velocity_rad_s) {
-    if (currentMode_ != DM_CM_VELOCITY) return;  // only allowed in VELOCITY
+    if (currentMode_ != DM_CM_VELOCITY) return false;  // only allowed in VELOCITY MODE
 
     CanMsg tx = {};
     uint32_t raw;
     ::memcpy(&raw, &velocity_rad_s, sizeof(raw));
 
-    tx.id = 0x200 + slaveId_;
+    tx.id = 0x200 + slaveId_;  // 速度制御用idオフセット0x200
     tx.data_length = 4;
     tx.data[0] = static_cast<uint8_t>(raw & 0xFF);
     tx.data[1] = static_cast<uint8_t>((raw >> 8) & 0xFF);
