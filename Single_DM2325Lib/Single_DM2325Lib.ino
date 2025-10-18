@@ -53,15 +53,21 @@ void setup() {
 
 void loop() {
   motor1.update();
-  motor1.sendVelocity(60.0f);
+  motor1.sendVelocity(1.0f);
   Serial.print("Status: ");
   Serial.print(motor1.getStatus());
-  Serial.print(", Position: ");
+  Serial.print(", Position_rad: ");
+  Serial.print(motor1.getPosition());
+  Serial.print(", PositionDeg: ");
   Serial.print(motor1.getPositionDeg());
+  Serial.print(", rad/s: ");
+  Serial.print(motor1.getVelocity());
   Serial.print(", RPM: ");
   Serial.print(motor1.getRPM());
   Serial.print(", RPS: ");
   Serial.print(motor1.getRPS());
+  Serial.print(", Torque: ");
+  Serial.print(motor1.getTorque());
   Serial.print(", MOSTemp: ");
   Serial.print(motor1.getMOSTemp());
   Serial.print(", RotorTemp: ");

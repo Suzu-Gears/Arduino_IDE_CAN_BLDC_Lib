@@ -107,7 +107,7 @@ public:
         feedback_.status = static_cast<uint8_t>((msg.data[0] >> 4) & 0x0F);
         uint16_t pos_raw = (uint16_t)(msg.data[1] << 8 | msg.data[2]);
         uint16_t vel_raw = (uint16_t)((msg.data[3] << 4) | (msg.data[4] >> 4));
-        feedback_.torque = (uint8_t)(msg.data[5]);
+        feedback_.torque = (uint16_t)(((msg.data[4] & 0x0F) << 8) | msg.data[5]);
         feedback_.temp_mos = (int8_t)msg.data[6];
         feedback_.temp_rotor = (int8_t)msg.data[7];
 
@@ -154,15 +154,17 @@ public:
     // placeholder: pack and send position CAN packet
   }
 
-  bool sendVelocityRPS(float velocity_rps) {
-    return sendVelocityRPM(velocity_rps * 60);
+  bool sendVelocityRPM(float velocity_rpm) {
+    return sendVelocity(velocity_rpm * PI / 30.0f);
   }
 
-  bool sendVelocityRPM(float velocity_rpm) {
-    return sendVelocity(velocity_rpm * PI * 2 / 60.0f);
+  bool sendVelocityRPS(float velocity_rps) {
+    return sendVelocity(velocity_rps * PI * 2.0f);
   }
 
   bool sendVelocity(float velocity_rad_s) {
+    if (currentMode_ != DM_CM_VELOCITY) return;  // only allowed in VELOCITY
+
     CanMsg tx = {};
     uint32_t raw;
     ::memcpy(&raw, &velocity_rad_s, sizeof(raw));
@@ -176,15 +178,20 @@ public:
 
     return can_->write(tx) >= 0;
   }
-
+  float getPosition() const {
+    return feedback_.position;
+  }
   float getPositionDeg() const {
     return feedback_.position * 180.0f / PI;
   }
+  float getVelocity() const {
+    return feedback_.velocity;  // rad/s
+  }
   float getRPM() const {
-    return feedback_.velocity * 180.0f / PI;
+    return feedback_.velocity * 30.0f / PI;  // RPM
   }
   float getRPS() const {
-    return getRPM() / 60.0f;
+    return feedback_.velocity / (2.0f * PI);  // rad/s to RPS
   }
   uint16_t getTorque() const {
     return feedback_.torque;
