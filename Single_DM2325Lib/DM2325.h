@@ -35,7 +35,7 @@ enum DM_RID : uint8_t {
   DM_RID_MST_ID = 7,
   DM_RID_ESC_ID = 8,
   DM_RID_TIMEOUT = 9,
-  DM_RID_CTRL_MODE = 10,
+  DM_RID_CTRL_MODE = 10,  //MIT, POS, VEL
   DM_RID_Damp = 11,
   DM_RID_Inertia = 12,
   DM_RID_hw_ver = 13,
@@ -46,9 +46,29 @@ enum DM_RID : uint8_t {
   DM_RID_LS = 18,
   DM_RID_Flux = 19,
   DM_RID_Gr = 20,
-  DM_RID_PMAX = 21,
-  DM_RID_VMAX = 22,
-  DM_RID_TMAX = 23
+  DM_RID_PMAX = 21,  //フィードバック読むのに必要
+  DM_RID_VMAX = 22,  //フィードバック読むのに必要
+  DM_RID_TMAX = 23,  //フィードバック読むのに必要
+  DM_RID_T_I_BW = 24,
+  DM_RID_T_KP_ASR = 25,
+  DM_RID_T_KI_ASR = 26,
+  DM_RID_T_KP_APR = 27,
+  DM_RID_T_KI_APR = 28,
+  DM_RID_T_OV_Value = 29,
+  DM_RID_T_GREF = 30,
+  DM_RID_T_Deta = 31,
+  DM_RID_T_V_BW = 32,
+  DM_RID_T_IQ_c1 = 33,
+  DM_RID_T_VL_c1 = 34,
+  DM_RID_T_can_br = 35,  //CANボーレート
+  DM_RID_T_sub_ver = 36,
+  DM_RID_T_u_off = 50,
+  DM_RID_T_v_off = 51,
+  DM_RID_T_k1 = 52,
+  DM_RID_T_k2 = 53,
+  DM_RID_T_m_off = 54,
+  DM_RID_T_dir = 55,
+  DM_RID_T_p_m = 80,
 };
 
 enum DM_Status {
@@ -112,6 +132,12 @@ public:
     // placeholder: implement CAN disable sequence
   }
 
+  void setControlMode(DM_ControlMode mode) {
+    currentMode_ = mode;
+    sendParamUInt32(DM_RID_CTRL_MODE, static_cast<uint32_t>(mode));
+    return;
+  }
+
   // send commands (placeholders) - check mode where appropriate
   void sendMIT() {
     if (currentMode_ != DM_CM_MIT) return;  // only allowed in MIT
@@ -138,8 +164,10 @@ public:
     return getRPM() / 60.0f;
   }
 
-  DM_ControlMode getMode() const {
-    return currentMode_;
+  DM_ControlMode getMode() {
+    uint32_t currentMode = 0;
+    readParamUInt32(DM_RID_CTRL_MODE, currentMode);
+    return static_cast<DM_ControlMode>(currentMode);
   }
   uint32_t getSlaveId() const {
     return slaveId_;
@@ -147,6 +175,7 @@ public:
   uint32_t getMasterId() const {
     return masterId_;
   }
+
   float getPMAX() {
     if (mappingrange_.pmax == 0) readParamFloat(DM_RID_PMAX, mappingrange_.pmax);
     return abs(mappingrange_.pmax);
@@ -199,6 +228,59 @@ public:
     ::memcpy(&f, &raw, sizeof(float));
     out = f;
     return true;
+  }
+
+  // write a uint32 parameter: send D2=0x55 request and wait for MST_ID response (D2=0x33)
+  // This version returns only success/failure (no out parameter).
+  bool sendParamUInt32(DM_RID rid, uint32_t value_to_write, uint32_t timeout_ms = 200) {
+    if (can_ == nullptr) return false;
+
+    CanMsg tx{};
+    tx.id = CanStandardId(0x7FF);
+    tx.data_length = 8;
+    tx.data[0] = static_cast<uint8_t>(slaveId_ & 0xFF);
+    tx.data[1] = static_cast<uint8_t>((slaveId_ >> 8) & 0xFF);
+    tx.data[2] = 0x55;  // write command
+    tx.data[3] = static_cast<uint8_t>(rid);
+    // payload little-endian
+    tx.data[4] = static_cast<uint8_t>(value_to_write & 0xFF);
+    tx.data[5] = static_cast<uint8_t>((value_to_write >> 8) & 0xFF);
+    tx.data[6] = static_cast<uint8_t>((value_to_write >> 16) & 0xFF);
+    tx.data[7] = static_cast<uint8_t>((value_to_write >> 24) & 0xFF);
+
+    if (can_->write(tx) < 0) return false;
+
+    unsigned long start = millis();
+    while (millis() - start < timeout_ms) {
+      if (can_->available()) {
+        CanMsg rx = can_->read();
+        uint32_t rid_from = rx.getStandardId();
+        if (rid_from != masterId_) continue;  // only consider frames from master
+        if (rx.data_length < 8) continue;
+        if (rx.data[2] != 0x33) continue;  // response marker
+        if (rx.data[3] != static_cast<uint8_t>(rid)) continue;
+        // data bytes 4..7 are little-endian uint32 (returned value or original reg)
+        uint32_t val = (uint32_t)rx.data[4] | ((uint32_t)rx.data[5] << 8) | ((uint32_t)rx.data[6] << 16) | ((uint32_t)rx.data[7] << 24);
+        // if the returned value equals requested value, write succeeded
+        bool success = (val == value_to_write);
+        // update cached mappingrange if writing PMAX/VMAX/TMAX
+        if (success) {
+          float vf;
+          ::memcpy(&vf, &val, sizeof(vf));
+          if (rid == DM_RID_PMAX) mappingrange_.pmax = vf;
+          if (rid == DM_RID_VMAX) mappingrange_.vmax = vf;
+          if (rid == DM_RID_TMAX) mappingrange_.tmax = vf;
+        }
+        return success;
+      }
+    }
+    return false;
+  }
+
+  bool sendParamFloat(DM_RID rid, float value_to_write, uint32_t timeout_ms = 200) {
+    uint32_t raw_value;
+    ::memcpy(&raw_value, &value_to_write, sizeof(uint32_t));
+    return sendParamUInt32(rid, raw_value, timeout_ms);
   }
 
 private:

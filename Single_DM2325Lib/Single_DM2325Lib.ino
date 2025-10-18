@@ -17,7 +17,6 @@ void setup() {
   CAN.setRX(CAN_RX_PIN);
   CAN.begin(CanBitRate::BR_1000k);
   delay(500);
-  Serial.println("DMmotorID test start");
   motor1.initialize();
   Serial.print("MasterID: ");
   Serial.print(motor1.getMasterId());
@@ -30,7 +29,21 @@ void setup() {
   Serial.print(", TMAX: ");
   Serial.print(motor1.getTMAX());
   Serial.println();
+  Serial.print("Ctrl Mode: ");
+  Serial.println(motor1.getMode());
+  motor1.setControlMode(DM::DM_CM_POSITION);
+  delay(10);
+  Serial.print("Ctrl Mode: ");
+  Serial.println(motor1.getMode());
+
+}
+
+void loop() {
   motor1.update();
+
+
+
+  
   Serial.print("Position: ");
   Serial.print(motor1.getPositionDeg());
   Serial.print(", RPM: ");
@@ -38,16 +51,5 @@ void setup() {
   Serial.print(", RPS: ");
   Serial.print(motor1.getRPS());
   Serial.println();
-}
-
-void loop() {
-  motor1.update();
-  //Serial.print("Position: ");
-  //Serial.print(motor1.getPositionDeg());
-  //Serial.print(", RPM: ");
-  //Serial.print(motor1.getRPM());
-  //Serial.print(", RPS: ");
-  //Serial.print(motor1.getRPS());
-  //Serial.println();
   delay(10);
 }
