@@ -102,10 +102,9 @@ public:
       CanMsg msg = can_->read();
       uint32_t masterid_feedback = msg.getStandardId();
       if (masterid_feedback == masterId_) {
-        // uint8_t motor_id_from_feedback = (uint8_t)(msg.data[0] & 0x0F);  // lower 4 bits
-        uint8_t motor_id_from_feedback = (uint8_t)(msg.data[0]);  // lower 4 bits
+        uint8_t motor_id_from_feedback = (uint8_t)(msg.data[0] & 0x0F);  // lower 4 bits: slave id
         if (motor_id_from_feedback != slaveId_) continue;
-        feedback_.status = (uint8_t)(msg.data[0] << 4);
+        feedback_.status = static_cast<uint8_t>((msg.data[0] >> 4) & 0x0F);
         uint16_t pos_raw = (uint16_t)(msg.data[1] << 8 | msg.data[2]);
         uint16_t vel_raw = (uint16_t)((msg.data[3] << 4) | (msg.data[4] >> 4));
         feedback_.torque = (uint8_t)(msg.data[5]);
@@ -125,7 +124,13 @@ public:
   }
 
   void enableMotor() {
-    // placeholder: implement CAN enable sequence
+    CanMsg txMsg = {};
+    txMsg.id = slaveId_;
+    txMsg.data_length = 8;
+    for (int i = 0; i < 7; i++) { txMsg.data[i] = 0xFF; }
+    txMsg.data[7] = 0xFC;
+    can_->write(txMsg);
+    delay(100);
   }
 
   void disableMotor() {
@@ -149,9 +154,27 @@ public:
     // placeholder: pack and send position CAN packet
   }
 
-  void sendVelocity(float velocity_rad_s) {
-    if (currentMode_ != DM_CM_VELOCITY) return;  // only allowed in VELOCITY
-    // placeholder: pack and send velocity CAN packet
+  bool sendVelocityRPS(float velocity_rps) {
+    return sendVelocityRPM(velocity_rps * 60);
+  }
+
+  bool sendVelocityRPM(float velocity_rpm) {
+    return sendVelocity(velocity_rpm * PI * 2 / 60.0f);
+  }
+
+  bool sendVelocity(float velocity_rad_s) {
+    CanMsg tx = {};
+    uint32_t raw;
+    ::memcpy(&raw, &velocity_rad_s, sizeof(raw));
+
+    tx.id = 0x200 + slaveId_;
+    tx.data_length = 4;
+    tx.data[0] = static_cast<uint8_t>(raw & 0xFF);
+    tx.data[1] = static_cast<uint8_t>((raw >> 8) & 0xFF);
+    tx.data[2] = static_cast<uint8_t>((raw >> 16) & 0xFF);
+    tx.data[3] = static_cast<uint8_t>((raw >> 24) & 0xFF);
+
+    return can_->write(tx) >= 0;
   }
 
   float getPositionDeg() const {
@@ -162,6 +185,15 @@ public:
   }
   float getRPS() const {
     return getRPM() / 60.0f;
+  }
+  uint16_t getTorque() const {
+    return feedback_.torque;
+  }
+  uint16_t getMOSTemp() const {
+    return feedback_.temp_mos;
+  }
+  uint16_t getRotorTemp() const {
+    return feedback_.temp_rotor;
   }
 
   DM_ControlMode getMode() {
@@ -174,6 +206,9 @@ public:
   }
   uint32_t getMasterId() const {
     return masterId_;
+  }
+  uint8_t getStatus() const {
+    return feedback_.status;
   }
 
   float getPMAX() {
