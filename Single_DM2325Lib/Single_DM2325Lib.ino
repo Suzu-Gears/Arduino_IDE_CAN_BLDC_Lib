@@ -13,6 +13,7 @@ DM::DM2325 motor1(&CAN, masterId, slaveId);
 
 void handleButtonInterrupt() {
   flg = true;
+  motor1.setZeroPoint();
 }
 
 void setup() {
@@ -48,13 +49,13 @@ void setup() {
   Serial.print("Ctrl Mode: ");
   Serial.println(motor1.getMode());
   while (!flg) { delay(1); }
-  motor1.enableMotor();
+  motor1.enable();
 }
 
 void loop() {
   motor1.update();
 
-  motor1.sendMIT(0.0f, 0.0f, 1.0f, 1.0f, 0.0f);
+  motor1.sendMIT(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 
   Serial.print("Status: ");
   Serial.print(motor1.getStatus());

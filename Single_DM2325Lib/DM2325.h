@@ -87,7 +87,6 @@ enum DM_Status {
 
 class DM2325 {
 public:
-  // ctor: set master and slave ids
   DM2325(arduino::HardwareCAN *can, uint32_t masterId, uint32_t slaveId)
     : can_(can), feedback_(), mappingrange_(), masterId_(masterId), slaveId_(slaveId), type_(DM_MT_DM2325), currentMode_(DM_CM_POSITION) {}
 
@@ -118,18 +117,31 @@ public:
     }
   }
 
-  void enableMotor() {
-    CanMsg txMsg = {};
-    txMsg.id = slaveId_;
-    txMsg.data_length = 8;
-    for (int i = 0; i < 7; i++) { txMsg.data[i] = 0xFF; }
-    txMsg.data[7] = 0xFC;
-    can_->write(txMsg);
-    delay(100);
+  bool enable() {
+    CanMsg tx = {};
+    tx.id = slaveId_;
+    tx.data_length = 8;
+    for (int i = 0; i < 7; i++) { tx.data[i] = 0xFF; }
+    tx.data[7] = 0xFC;
+    return can_->write(tx) >= 0;
   }
 
-  void disableMotor() {
-    // placeholder: implement CAN disable sequence
+  bool disable() {
+    CanMsg tx = {};
+    tx.id = slaveId_;
+    tx.data_length = 8;
+    for (int i = 0; i < 7; i++) { tx.data[i] = 0xFF; }
+    tx.data[7] = 0xFD;
+    return can_->write(tx) >= 0;
+  }
+
+  bool setZeroPoint() {
+    CanMsg tx = {};
+    tx.id = slaveId_;
+    tx.data_length = 8;
+    for (int i = 0; i < 7; i++) { tx.data[i] = 0xFF; }
+    tx.data[7] = 0xFE;
+    return can_->write(tx) >= 0;
   }
 
   void setControlMode(DM_ControlMode mode) {
@@ -138,7 +150,6 @@ public:
     return;
   }
 
-  // send commands (placeholders) - check mode where appropriate
   bool sendMIT(float position_rad, float velocity_rad_s, float kp, float kd, float torque_ff) {
     if (currentMode_ != DM_CM_MIT) return false;  // only allowed in MIT MODE
 
@@ -149,7 +160,7 @@ public:
     uint16_t torque_raw = floatToUint(torque_ff, -getTMAX(), getTMAX(), 12);
 
     CanMsg tx = {};
-    tx.id = slaveId_;  // 位置速度制御用idオフセット0x100
+    tx.id = slaveId_;
     tx.data_length = 8;
     tx.data[0] = static_cast<uint8_t>(position_raw >> 8);
     tx.data[1] = static_cast<uint8_t>(position_raw & 0xFF);
@@ -282,7 +293,7 @@ public:
       if (can_->available()) {
         CanMsg rx = can_->read();
         uint32_t rid_from = rx.getStandardId();
-        if (rid_from != masterId_) continue;  // only consider frames from master
+        if (rid_from != masterId_) continue;
         if (rx.data_length < 8) continue;
         if (rx.data[2] != 0x33) continue;
         if (rx.data[3] != static_cast<uint8_t>(rid)) continue;
@@ -304,8 +315,6 @@ public:
     return true;
   }
 
-  // write a uint32 parameter: send D2=0x55 request and wait for MST_ID response (D2=0x33)
-  // This version returns only success/failure (no out parameter).
   bool sendParamUInt32(DM_RID rid, uint32_t value_to_write, uint32_t timeout_ms = 200) {
     if (can_ == nullptr) return false;
 
@@ -329,9 +338,9 @@ public:
       if (can_->available()) {
         CanMsg rx = can_->read();
         uint32_t rid_from = rx.getStandardId();
-        if (rid_from != masterId_) continue;  // only consider frames from master
+        if (rid_from != masterId_) continue;
         if (rx.data_length < 8) continue;
-        if (rx.data[2] != 0x33) continue;  // response marker
+        if (rx.data[2] != 0x33) continue;
         if (rx.data[3] != static_cast<uint8_t>(rid)) continue;
         // data bytes 4..7 are little-endian uint32 (returned value or original reg)
         uint32_t val = (uint32_t)rx.data[4] | ((uint32_t)rx.data[5] << 8) | ((uint32_t)rx.data[6] << 16) | ((uint32_t)rx.data[7] << 24);
