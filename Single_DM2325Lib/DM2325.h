@@ -107,18 +107,13 @@ public:
         feedback_.status = static_cast<uint8_t>((msg.data[0] >> 4) & 0x0F);
         uint16_t pos_raw = (uint16_t)(msg.data[1] << 8 | msg.data[2]);
         uint16_t vel_raw = (uint16_t)((msg.data[3] << 4) | (msg.data[4] >> 4));
-        feedback_.torque = (uint16_t)(((msg.data[4] & 0x0F) << 8) | msg.data[5]);
+        uint16_t torque_raw = (uint16_t)(((msg.data[4] & 0x0F) << 8) | msg.data[5]);
         feedback_.temp_mos = (int8_t)msg.data[6];
         feedback_.temp_rotor = (int8_t)msg.data[7];
 
-        auto uint_to_float = [](uint16_t x, float min_val, float max_val, int bits) -> float {
-          float span = max_val - min_val;
-          float normalized = (float)x / (float)((1 << bits) - 1);
-          return normalized * span + min_val;
-        };
-
-        feedback_.position = uint_to_float(pos_raw, -getPMAX(), getPMAX(), 16);
-        feedback_.velocity = uint_to_float(vel_raw, -getVMAX(), getVMAX(), 12);
+        feedback_.position = uintToFloat(pos_raw, -getPMAX(), getPMAX(), 16);
+        feedback_.velocity = uintToFloat(vel_raw, -getVMAX(), getVMAX(), 12);
+        feedback_.torque = uintToFloat(torque_raw, -getTMAX(), getTMAX(), 12);
       }
     }
   }
@@ -144,19 +139,38 @@ public:
   }
 
   // send commands (placeholders) - check mode where appropriate
-  bool sendMIT() {
+  bool sendMIT(float position_rad, float velocity_rad_s, float kp, float kd, float torque_ff) {
     if (currentMode_ != DM_CM_MIT) return false;  // only allowed in MIT MODE
-    // placeholder: pack and send CAN MIT packet
-  }
 
-  bool sendPosition(float position_rad, float vel_limit_rad_s) {
-    if (currentMode_ != DM_CM_POSITION) return false;  // only allowed in POSITION MODE
+    uint16_t position_raw = floatToUint(position_rad, -getPMAX(), getPMAX(), 16);
+    uint16_t velocity_raw = floatToUint(velocity_rad_s, -getVMAX(), getVMAX(), 12);
+    uint16_t kp_raw = floatToUint(kp, 0.0f, 500.0f, 12);
+    uint16_t kd_raw = floatToUint(kd, 0.0f, 5.0f, 12);
+    uint16_t torque_raw = floatToUint(torque_ff, -getTMAX(), getTMAX(), 12);
 
     CanMsg tx = {};
+    tx.id = slaveId_;  // 位置速度制御用idオフセット0x100
+    tx.data_length = 8;
+    tx.data[0] = static_cast<uint8_t>(position_raw >> 8);
+    tx.data[1] = static_cast<uint8_t>(position_raw & 0xFF);
+    tx.data[2] = static_cast<uint8_t>(velocity_raw >> 4);
+    tx.data[3] = static_cast<uint8_t>((velocity_raw & 0x0F) << 4) | (kp_raw >> 8);
+    tx.data[4] = static_cast<uint8_t>(kp_raw & 0xFF);
+    tx.data[5] = static_cast<uint8_t>(kd_raw >> 4);
+    tx.data[6] = static_cast<uint8_t>((kd_raw & 0x0F) << 4) | (torque_raw >> 8);
+    tx.data[7] = static_cast<uint8_t>(torque_raw & 0xFF);
+
+    return can_->write(tx) >= 0;
+  }
+
+  bool sendPosition(float position_rad, float velocity_limit_rad_s) {
+    if (currentMode_ != DM_CM_POSITION) return false;  // only allowed in POSITION MODE
+
     uint32_t position_raw, velocity_raw;
     ::memcpy(&position_raw, &position_rad, sizeof(position_raw));
-    ::memcpy(&velocity_raw, &vel_limit_rad_s, sizeof(velocity_raw));
+    ::memcpy(&velocity_raw, &velocity_limit_rad_s, sizeof(velocity_raw));
 
+    CanMsg tx = {};
     tx.id = 0x100 + slaveId_;  // 位置速度制御用idオフセット0x100
     tx.data_length = 8;
     tx.data[0] = static_cast<uint8_t>(position_raw & 0xFF);
@@ -182,10 +196,10 @@ public:
   bool sendVelocity(float velocity_rad_s) {
     if (currentMode_ != DM_CM_VELOCITY) return false;  // only allowed in VELOCITY MODE
 
-    CanMsg tx = {};
     uint32_t raw;
     ::memcpy(&raw, &velocity_rad_s, sizeof(raw));
 
+    CanMsg tx = {};
     tx.id = 0x200 + slaveId_;  // 速度制御用idオフセット0x200
     tx.data_length = 4;
     tx.data[0] = static_cast<uint8_t>(raw & 0xFF);
@@ -195,6 +209,7 @@ public:
 
     return can_->write(tx) >= 0;
   }
+
   float getPosition() const {
     return feedback_.position;
   }
@@ -210,7 +225,7 @@ public:
   float getRPS() const {
     return feedback_.velocity / (2.0f * PI);  // rad/s to RPS
   }
-  uint16_t getTorque() const {
+  float getTorque() const {
     return feedback_.torque;
   }
   uint16_t getMOSTemp() const {
@@ -366,5 +381,18 @@ private:
   uint32_t slaveId_ = 1;
   DM_MotorType type_ = DM_MT_DM2325;
   DM_ControlMode currentMode_ = DM_CM_POSITION;
+
+  static float uintToFloat(uint16_t x, float min_val, float max_val, int bits) {
+    float span = max_val - min_val;
+    float normalized = (float)x / (float)((1 << bits) - 1);
+    return normalized * span + min_val;
+  }
+
+  static uint16_t floatToUint(float x, float min_val, float max_val, int bits) {
+    float span = max_val - min_val;
+    float clamped_x = (x < min_val) ? min_val : ((x > max_val) ? max_val : x);
+    float normalized = (clamped_x - min_val) / span;
+    return (uint16_t)(normalized * ((1 << bits) - 1));
+  }
 };
 }  // namespace DM

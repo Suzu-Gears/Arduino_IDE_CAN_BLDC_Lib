@@ -43,7 +43,7 @@ void setup() {
   Serial.println();
   Serial.print("Ctrl Mode: ");
   Serial.println(motor1.getMode());
-  motor1.setControlMode(DM::DM_CM_POSITION);
+  motor1.setControlMode(DM::DM_CM_MIT);
   delay(10);
   Serial.print("Ctrl Mode: ");
   Serial.println(motor1.getMode());
@@ -54,28 +54,7 @@ void setup() {
 void loop() {
   motor1.update();
 
-  static uint8_t motionStep = 1;
-  static unsigned long stepTimer = 0;
-
-  if (motionStep == 1) {
-    motor1.sendPosition(0.0f, 1.0f);  // 0度
-    if (millis() - stepTimer > 2000) {
-      motionStep = 2;  // 次のステップへ
-      stepTimer = millis();
-    }
-  } else if (motionStep == 2) {
-    motor1.sendPosition(12.0f, 1.0f);  // 90度
-    if (millis() - stepTimer > 2000) {
-      motionStep = 3;  // 次のステップへ
-      stepTimer = millis();
-    }
-  } else if (motionStep == 3) {
-    motor1.sendPosition(-12.0f, 1.0f);  // -90度で停止
-    if (millis() - stepTimer > 2000) {
-      motionStep = 1;  // 次のステップへ
-      stepTimer = millis();
-    }
-  }
+  motor1.sendMIT(0.0f, 0.0f, 1.0f, 1.0f, 0.0f);
 
   Serial.print("Status: ");
   Serial.print(motor1.getStatus());
