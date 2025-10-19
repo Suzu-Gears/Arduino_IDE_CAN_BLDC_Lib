@@ -13,15 +13,29 @@
 
 namespace DM {
 
-enum DM_MotorType {
-  DM_MT_DM3519 = 0,
-  DM_MT_DM2325 = 1,
-};
+// Default Mapping Ranges
+/* DM4310~DMG6220 from https://github.com/cmjang/DM_Control_Python/blob/main/DM_CAN.py
+  PMAX    VMAX    TMAX    Model
+  12.5f,  30.0f,  10.0f,  DM4310
+  12.5f,  50.0f,  10.0f,  DM4310_48V
+  12.5f,   8.0f,  28.0f,  DM4340
+  12.5f,  10.0f,  28.0f,  DM4340_48V
+  12.5f,  45.0f,  20.0f,  DM6006
+  12.5f,  45.0f,  40.0f,  DM8006
+  12.5f,  45.0f,  54.0f,  DM8009
+  12.5f,  25.0f, 200.0f,  DM10010L
+  12.5f,  20.0f, 200.0f,  DM10010
+  12.5f, 280.0f,   1.0f,  DMH3510
+  12.5f,  45.0f,  10.0f,  DMH6215
+  12.5f,  45.0f,  10.0f,  DMG6220
+  12.5f, 200.0f,  10.0f,  DM3519
+  12.5f, 200.0f,  10.0f,  DM2325
+*/
 
 enum DM_ControlMode : uint32_t {
   DM_CM_MIT = 1,
-  DM_CM_POSITION = 2,
-  DM_CM_VELOCITY = 3
+  DM_CM_POS_VEL = 2,
+  DM_CM_VEL = 3,
 };
 
 enum DM_RID : uint8_t {
@@ -35,7 +49,7 @@ enum DM_RID : uint8_t {
   DM_RID_MST_ID = 7,
   DM_RID_ESC_ID = 8,
   DM_RID_TIMEOUT = 9,
-  DM_RID_CTRL_MODE = 10,  //MIT, POS, VEL
+  DM_RID_CTRL_MODE = 10,  //MIT, POS_VEL, VELのモード切り替え
   DM_RID_Damp = 11,
   DM_RID_Inertia = 12,
   DM_RID_hw_ver = 13,
@@ -72,28 +86,29 @@ enum DM_RID : uint8_t {
 };
 
 enum DM_Status {
-  DM_STATUS_DISABLED = 0x00,        // 無効
-  DM_STATUS_ENABLED = 0x01,         // 有効
+  DM_STATUS_DISABLED = 0x00,        // モーター無効
+  DM_STATUS_ENABLED = 0x01,         // モーター有効
   DM_STATUS_SENSOR_ERROR = 0x05,    // センサー読み取りエラー
   DM_STATUS_PARAM_ERROR = 0x06,     // モーターパラメータ読み取りエラー
-  DM_STATUS_OVER_VOLTAGE = 0x08,    // 過電圧
-  DM_STATUS_UNDER_VOLTAGE = 0x09,   // 低電圧
-  DM_STATUS_OVER_CURRENT = 0x0A,    // 過電流
+  DM_STATUS_OVER_VOLTAGE = 0x08,    // 過電圧 60V
+  DM_STATUS_UNDER_VOLTAGE = 0x09,   // 低電圧 15V
+  DM_STATUS_OVER_CURRENT = 0x0A,    // 過電流 13A
   DM_STATUS_MOS_OVER_TEMP = 0x0B,   // MOS過熱
   DM_STATUS_COIL_OVER_TEMP = 0x0C,  // モーターコイル過熱
   DM_STATUS_COMM_LOST = 0x0D,       // 通信喪失
   DM_STATUS_OVER_LOAD = 0x0E,       // 過負荷
 };
 
-class DM2325 {
+class Motor {
 public:
-  DM2325(arduino::HardwareCAN *can, uint32_t masterId, uint32_t slaveId)
-    : can_(can), feedback_(), mappingrange_(), masterId_(masterId), slaveId_(slaveId), type_(DM_MT_DM2325), currentMode_(DM_CM_POSITION) {}
+  Motor(arduino::HardwareCAN *can, uint32_t masterId, uint32_t slaveId, DM_ControlMode mode)
+    : can_(can), feedback_(), mappingrange_(), masterId_(masterId), slaveId_(slaveId), currentMode_(mode) {}
 
   void initialize() {
     getPMAX();
     getVMAX();
     getTMAX();
+    setControlMode(currentMode_);
   }
 
   void update() {
@@ -175,7 +190,7 @@ public:
   }
 
   bool sendPosition(float position_rad, float velocity_limit_rad_s) {
-    if (currentMode_ != DM_CM_POSITION) return false;  // only allowed in POSITION MODE
+    if (currentMode_ != DM_CM_POS_VEL) return false;  // only allowed in POSITION_VELOCITY MODE
 
     uint32_t position_raw, velocity_raw;
     ::memcpy(&position_raw, &position_rad, sizeof(position_raw));
@@ -205,7 +220,7 @@ public:
   }
 
   bool sendVelocity(float velocity_rad_s) {
-    if (currentMode_ != DM_CM_VELOCITY) return false;  // only allowed in VELOCITY MODE
+    if (currentMode_ != DM_CM_VEL) return false;  // only allowed in VELOCITY MODE
 
     uint32_t raw;
     ::memcpy(&raw, &velocity_rad_s, sizeof(raw));
@@ -234,22 +249,22 @@ public:
     return feedback_.velocity * 30.0f / PI;  // RPM
   }
   float getRPS() const {
-    return feedback_.velocity / (2.0f * PI);  // rad/s to RPS
+    return feedback_.velocity / (2.0f * PI);  // RPS
   }
   float getTorque() const {
-    return feedback_.torque;
+    return feedback_.torque;  // Nm
   }
   uint16_t getMOSTemp() const {
-    return feedback_.temp_mos;
+    return feedback_.temp_mos;  // ℃
   }
   uint16_t getRotorTemp() const {
-    return feedback_.temp_rotor;
+    return feedback_.temp_rotor;  // ℃
   }
 
-  DM_ControlMode getMode() {
+  uint32_t getMode() {
     uint32_t currentMode = 0;
     readParamUInt32(DM_RID_CTRL_MODE, currentMode);
-    return static_cast<DM_ControlMode>(currentMode);
+    return (currentMode);
   }
   uint32_t getSlaveId() const {
     return slaveId_;
@@ -378,9 +393,9 @@ private:
   };
 
   struct MappingRange {
-    float pmax = 0.0f;  //デフォルト値 12.5f  2325と3519で一緒
-    float vmax = 0.0f;  //デフォルト値 200.0f
-    float tmax = 0.0f;  //デフォルト値 10.0f
+    float pmax = 0.0f;
+    float vmax = 0.0f;
+    float tmax = 0.0f;
   };
 
   arduino::HardwareCAN *can_;
@@ -388,8 +403,7 @@ private:
   MappingRange mappingrange_;
   uint32_t masterId_ = 0;
   uint32_t slaveId_ = 1;
-  DM_MotorType type_ = DM_MT_DM2325;
-  DM_ControlMode currentMode_ = DM_CM_POSITION;
+  DM_ControlMode currentMode_ = DM_CM_MIT;
 
   static float uintToFloat(uint16_t x, float min_val, float max_val, int bits) {
     float span = max_val - min_val;
