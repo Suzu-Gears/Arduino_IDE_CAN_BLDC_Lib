@@ -1,5 +1,3 @@
-#include <C6x0.h>  //https://github.com/tutrc-freshman/TUTRC_ArduinoLib.git
-
 // ▼▼▼ Select Board ▼▼▼ 使うボードだけコメントアウトを外す
 #define USE_BOARD_ARDUINO_R4
 // #define USE_BOARD_PICO
@@ -22,6 +20,9 @@ const uint32_t CAN_RX_PIN = 1;  //GP1とGP3みたいな組み合わせでも動�
 #error "ボードが選択されていません。ファイルの先頭で USE_BOARD_... のどれか1つを有効にしてください。"
 
 #endif
+
+#include <C6x0.h>  //https://github.com/tutrc-freshman/TUTRC_ArduinoLib.git
+                   //CANライブラリよりも下で呼び出す api/HardwareCAN.hが無いって言われる
 
 C6x0 c6x0;
 
