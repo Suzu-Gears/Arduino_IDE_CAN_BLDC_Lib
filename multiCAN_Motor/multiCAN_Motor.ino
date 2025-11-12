@@ -7,8 +7,8 @@
 const uint32_t CAN_TX_PIN = 0;
 const uint32_t CAN_RX_PIN = 1;
 
-const uint32_t dm_master = 0; 
-const uint32_t dm_slave = 9;  //DMモーターはSlaveID1の場合、MITモードの指令のIDが0x201となりロボマスモーターのID1からのフィードバックと被るので、共存させるなら9より大きいIDを使う
+const uint32_t dm_master = 0;
+const uint32_t dm_slave = 9;  //DMモーターはSlaveID1~8の場合、MITモードの指令のIDが0x201~208となりロボマスモーターののフィードバックと被るので、共存させるなら9より大きいIDを使う
 
 // Single hub reading the physical CAN
 CANHub canHub(&CAN);
@@ -17,6 +17,9 @@ C6x0 c6x0;
 // DM motor example placeholders
 CANClient* dm_client = nullptr;
 DM::Motor* dm_motor = nullptr;
+// toggle state for reversing every 3 seconds
+bool toggle_sign = false;
+unsigned long last_toggle_ms = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -35,6 +38,7 @@ void setup() {
   // initialize and enable
   dm_motor->initialize();
   dm_motor->enable();
+  last_toggle_ms = millis();
 }
 
 void loop() {
@@ -43,15 +47,26 @@ void loop() {
     // poll hub for DM messages as well
     // dm_client->available() will cause canHub.poll() internally
     dm_client->available();
-    // send position 0 with zero velocity limit
+    // update motor state from feedback
     dm_motor->update();
   }
 
-  dm_motor->sendVelocityRPS(0.1f);
+  // toggle every 3000 ms
+  unsigned long now = millis();
+  if (now - last_toggle_ms >= 3000) {
+    last_toggle_ms = now;
+    toggle_sign = !toggle_sign;
+  }
+
+  // send DM velocity with alternating sign (0.1 RPS)
+  if (dm_motor) {
+    float dm_rps = toggle_sign ? -0.2f : 0.2f;
+    dm_motor->sendVelocityRPS(dm_rps);
+  }
 
   float kp = 100;
   float rps = c6x0.getRpm(C610_ID_1) / 60.0f;
-  float rps_ref = 10;
+  float rps_ref = toggle_sign ? -10.0f : 10.0f;
   float current_ref = kp * (rps_ref - rps);
 
   c6x0.setCurrent(C610_ID_1, current_ref);
@@ -64,17 +79,13 @@ void loop() {
   Serial.print(c6x0.getPosition(C610_ID_1));
   Serial.print(" deg, RPS: ");
   Serial.print(rps);
-  Serial.print(", Command_mA: ");
-  Serial.print(current_ref);
-  Serial.print(", Actual_mA: ");
-  Serial.print(c6x0.getCurrent(C610_ID_1));
   if (dm_motor) {
     Serial.print("\t DM_Status: ");
     Serial.print(dm_motor->getStatus());
-    Serial.print(", DM_Pos_rad: ");
-    Serial.print(dm_motor->getPosition());
-    Serial.print(", DM_Vel_rad_s: ");
-    Serial.print(dm_motor->getVelocity());
+    Serial.print(", DM_Pos_Deg: ");
+    Serial.print(dm_motor->getPositionDeg());
+    Serial.print(", DM_Vel_RPS: ");
+    Serial.print(dm_motor->getRPS());
     Serial.print(", DM_Torque: ");
     Serial.print(dm_motor->getTorque());
   }
