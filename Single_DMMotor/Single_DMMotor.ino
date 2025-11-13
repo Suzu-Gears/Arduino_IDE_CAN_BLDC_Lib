@@ -1,28 +1,18 @@
 #include <RP2040PIO_CAN.h>
-#include "DM2325.h"
+#include "DM_Motor.h"
 
 const uint8_t CAN_TX_PIN = 0;
 const uint8_t CAN_RX_PIN = 1;
+
 const uint8_t masterId = 0;
-const uint8_t slaveId = 1;
-const uint8_t UserButtonPin = 29;
+const uint8_t slaveId = 9;
 
-bool flg = false;
-
-DM::Motor motor1(&CAN, masterId, slaveId, DM::DM_ControlMode::DM_CM_POS_VEL);
-
-void handleButtonInterrupt() {
-  flg = true;
-  motor1.setZeroPoint();
-}
+DM::Motor motor1(&CAN, masterId, slaveId, DM::DM_ControlMode::DM_CM_MIT);
 
 void setup() {
-  pinMode(UserButtonPin, INPUT);
-  attachInterrupt(digitalPinToInterrupt(UserButtonPin), handleButtonInterrupt, RISING);
-
   Serial.begin(115200);
   while (!Serial) {
-    ;  // wait for serial
+    ;  //シリアル接続時のみ
   }
   CAN.setTX(CAN_TX_PIN);
   CAN.setRX(CAN_RX_PIN);
@@ -44,11 +34,17 @@ void setup() {
   Serial.println();
   Serial.print("Ctrl Mode: ");
   Serial.println(motor1.getMode());
+
   motor1.setControlMode(DM::DM_CM_MIT);
+  // motor1.setControlMode(DM::DM_CM_POS_VEL);
+  // motor1.setControlMode(DM::DM_CM_VEL);
+
   delay(10);
   Serial.print("Ctrl Mode: ");
   Serial.println(motor1.getMode());
-  while (!flg) { delay(1); }
+
+  motor1.setZeroPoint();
+  delay(1000);
   motor1.enable();
 }
 
@@ -56,6 +52,8 @@ void loop() {
   motor1.update();
 
   motor1.sendMIT(0.0f, 0.0f, 1.0f, 1.0f, 0.0f);
+  // motor1.sendPosition(0.0f, 0.0f);
+  // motor1.sendVelocityRPS(0.1f);
 
   Serial.print("Status: ");
   Serial.print(motor1.getStatus());
