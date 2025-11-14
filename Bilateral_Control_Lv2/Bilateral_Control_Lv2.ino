@@ -4,8 +4,8 @@
 const uint8_t CAN_TX_PIN = 0;
 const uint8_t CAN_RX_PIN = 1;
 const uint8_t masterId = 0;
-const uint8_t slaveId_A = 1;
-const uint8_t slaveId_B = 2;
+const uint8_t slaveId_A = 9;
+const uint8_t slaveId_B = 10;
 
 DMMotor motor1(&CAN, masterId, slaveId_A, DM_ControlMode::DM_CM_POS_VEL);
 DMMotor motor2(&CAN, masterId, slaveId_B, DM_ControlMode::DM_CM_POS_VEL);
