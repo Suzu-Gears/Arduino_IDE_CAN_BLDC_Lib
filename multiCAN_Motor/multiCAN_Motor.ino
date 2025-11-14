@@ -2,8 +2,47 @@
 
 #include "C6x0.h"
 #include "CANManager.h"
-#include "DM_Motor.h"
-#include "DMManager.h"
+#include "DM_Motor.h" // DMManager.h は DM_Motor.h の中でインクルードされる
+
+// --- Method Implementations for DMManager ---
+// DMManagerのメソッド実装を.inoファイルに配置し、ヘッダの宣言とここで実装する
+// これによりDMManager.hとDM_Motor.hの間の循環依存を回避し、
+// ヘッダオンリーのライブラリとして機能させる
+// (通常は.cppファイルに記述するが、Arduinoの都合上)
+
+DMManager::DMManager(CANHub* hub, uint32_t masterId)
+    : masterId_(masterId) {
+    if (hub) {
+        client_ = hub->createClientWithIds({ masterId_ });
+    }
+}
+
+void DMManager::registerMotor(uint32_t slaveId, DMMotor* motor) {
+    if (motor) {
+        motors_[slaveId] = motor;
+    }
+}
+
+void DMManager::update() {
+    if (!client_) return;
+
+    while (client_->available()) {
+        CanMsg msg = client_->read();
+        
+        if (msg.getStandardId() != masterId_) {
+            continue;
+        }
+
+        uint8_t slaveId = DMMotor::getSlaveIdFromMessage(msg);
+        auto it = motors_.find(slaveId);
+        if (it != motors_.end()) {
+            it->second->processMessage(msg);
+        }
+    }
+}
+
+
+// --- Global Object Declarations ---
 
 const uint32_t CAN_TX_PIN = 0;
 const uint32_t CAN_RX_PIN = 1;
@@ -12,10 +51,15 @@ const uint32_t dm_master = 0;
 const uint32_t dm_slaveA = 9;  //DMモーターはSlaveID1~8の場合、MITモードの指令のIDが0x201~208となりロボマスモーターののフィードバックと被るので、共存させるなら9より大きいIDを使う
 const uint32_t dm_slaveB = 10;
 
-// Hardware and Manager objects
+// Hardware and Manager objects are now declared globally as values
 CANHub canHub(&CAN);
 C6x0 c6x0;
 DMManager dmManager(&canHub, dm_master);
+
+// Declare motor objects globally, they will auto-register with the manager
+DMMotor motorA(&dmManager, dm_slaveA, DM_ControlMode::DM_CM_MIT);
+DMMotor motorB(&dmManager, dm_slaveB, DM_ControlMode::DM_CM_MIT);
+
 
 // toggle state for reversing every 3 seconds
 bool toggle_sign = false;
@@ -32,13 +76,11 @@ void setup() {
   CANClient* c6x0_client = canHub.createClientWithRange(0x201, 8);
   c6x0.setCAN(c6x0_client);
 
-  // Add motors to the DMManager
-  dmManager.addMotor(dm_slaveA, DM_ControlMode::DM_CM_MIT);
-  dmManager.addMotor(dm_slaveB, DM_ControlMode::DM_CM_MIT);
-
-  // Initialize and enable all managed motors
-  dmManager.initialize();
-  dmManager.enable();
+  // Initialize and enable motors directly
+  motorA.initialize();
+  motorA.enable();
+  motorB.initialize();
+  motorB.enable();
   
   last_toggle_ms = millis();
 }
@@ -46,11 +88,7 @@ void setup() {
 void loop() {
   // Update all motor feedbacks
   c6x0.update();
-  dmManager.update();
-
-  // ★ loopの最初にモーターへの参照を変数に入れておく
-  auto& motorA = dmManager.getMotor(dm_slaveA);
-  auto& motorB = dmManager.getMotor(dm_slaveB);
+  dmManager.update(); // This will call processMessage on motorA and motorB
 
   // toggle every 3000 ms
   unsigned long now = millis();
@@ -59,7 +97,7 @@ void loop() {
     toggle_sign = !toggle_sign;
   }
 
-  // Send commands to DM motors using dot-notation via local references
+  // Send commands to DM motors directly
   float posA = motorA.getPosition();
   float posB = motorB.getPosition();
   const float kp = 5.0f;
@@ -77,7 +115,7 @@ void loop() {
   c6x0.setCurrent(C610_ID_1, current_ref);
   c6x0.transmit();
 
-  // Print feedback using local references
+  // Print feedback
   Serial.print("ID: 0x");
   Serial.print(0x201 + C610_ID_1, HEX);
   Serial.print(", Angle: ");
