@@ -104,7 +104,7 @@ public:
   static constexpr int FEEDBACK_STATUS_SHIFT = 4;
   static constexpr uint8_t FEEDBACK_STATUS_MASK = 0x0F;
 
-  static uint8_t getSlaveIdFromMessage(const CanMsg& msg) {
+  static uint8_t getSlaveIdFromMessage(const CanMsg &msg) {
     // This assumes the lower 4 bits of the first data byte contain the slave ID.
     return msg.data[0] & FEEDBACK_SLAVE_ID_MASK;
   }

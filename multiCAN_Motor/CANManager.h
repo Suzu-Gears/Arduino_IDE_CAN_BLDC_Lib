@@ -90,7 +90,7 @@ public:
     while (base_->available()) {
       CanMsg m = base_->read();
       uint32_t id = m.getStandardId();
-      
+
       std::set<CANClient*> recipients;
 
       // Find recipients from specific ID subscriptions
