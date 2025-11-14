@@ -1,0 +1,2 @@
+# Ignore VS Code Arduino per-workspace configuration
+.vscode/arduino.json
