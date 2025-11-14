@@ -7,7 +7,7 @@ const uint8_t CAN_RX_PIN = 1;
 const uint8_t masterId = 0;
 const uint8_t slaveId = 9;
 
-DM::Motor motor1(&CAN, masterId, slaveId, DM::DM_ControlMode::DM_CM_MIT);
+DMMotor motor1(&CAN, masterId, slaveId, DM_ControlMode::DM_CM_MIT);
 
 void setup() {
   Serial.begin(115200);
@@ -35,9 +35,9 @@ void setup() {
   Serial.print("Ctrl Mode: ");
   Serial.println(motor1.getMode());
 
-  motor1.setControlMode(DM::DM_CM_MIT);
-  // motor1.setControlMode(DM::DM_CM_POS_VEL);
-  // motor1.setControlMode(DM::DM_CM_VEL);
+  motor1.setControlMode(DM_CM_MIT);
+  // motor1.setControlMode(DM_CM_POS_VEL);
+  // motor1.setControlMode(DM_CM_VEL);
 
   delay(10);
   Serial.print("Ctrl Mode: ");
