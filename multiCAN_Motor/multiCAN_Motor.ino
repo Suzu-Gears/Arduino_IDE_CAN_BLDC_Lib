@@ -2,21 +2,25 @@
 
 #include "C6x0.h"
 #include "CANManager.h"
-#include "DM2325.h"
+#include "DM_Motor.h"
+#include "DMManager.h"
 
 const uint32_t CAN_TX_PIN = 0;
 const uint32_t CAN_RX_PIN = 1;
 
 const uint32_t dm_master = 0;
-const uint32_t dm_slave = 9;  //DMモーターはSlaveID1~8の場合、MITモードの指令のIDが0x201~208となりロボマスモーターののフィードバックと被るので、共存させるなら9より大きいIDを使う
+const uint32_t dm_slaveA = 9;  //DMモーターはSlaveID1~8の場合、MITモードの指令のIDが0x201~208となりロボマスモーターののフィードバックと被るので、共存させるなら9より大きいIDを使う
+const uint32_t dm_slaveB = 10;
 
 // Single hub reading the physical CAN
 CANHub canHub(&CAN);
 
 C6x0 c6x0;
-// DM motor example placeholders
-CANClient* dm_client = nullptr;
-DM::Motor* dm_motor = nullptr;
+// DM motor and manager instances
+DMMotor* dm_motorA = nullptr;
+DMMotor* dm_motorB = nullptr;
+DMManager* dm_manager = nullptr;
+
 // toggle state for reversing every 3 seconds
 bool toggle_sign = false;
 unsigned long last_toggle_ms = 0;
@@ -32,23 +36,32 @@ void setup() {
   CANClient* c6x0_client = canHub.createClientWithRange(0x201, 8);
   c6x0.setCAN(c6x0_client);
 
-  dm_client = canHub.createClientWithIds({ dm_master });
-  // create motor instance dynamically so we can pass the client pointer
-  dm_motor = new DM::Motor(dm_client, dm_master, dm_slave, DM::DM_ControlMode::DM_CM_VEL);
-  // initialize and enable
-  dm_motor->initialize();
-  dm_motor->enable();
+  // Create a client and a manager for DM motors
+  CANClient* dm_client = canHub.createClientWithIds({ dm_master });
+  dm_manager = new DMManager(dm_client, dm_master);
+
+  // Create motor instances (still need to pass client and masterId for now)
+  dm_motorA = new DMMotor(dm_client, dm_master, dm_slaveA, DM_ControlMode::DM_CM_MIT);
+  dm_motorB = new DMMotor(dm_client, dm_master, dm_slaveB, DM_ControlMode::DM_CM_MIT);
+
+  // Register motors with the manager
+  dm_manager->registerMotor(dm_motorA);
+  dm_manager->registerMotor(dm_motorB);
+
+  // Initialize and enable motors
+  dm_motorA->initialize();
+  dm_motorA->enable();
+  dm_motorB->initialize();
+  dm_motorB->enable();
   last_toggle_ms = millis();
 }
 
 void loop() {
   c6x0.update();
-  if (dm_client) {
-    // poll hub for DM messages as well
-    // dm_client->available() will cause canHub.poll() internally
-    dm_client->available();
-    // update motor state from feedback
-    dm_motor->update();
+
+  // The manager handles polling and dispatching messages to the correct motor
+  if (dm_manager) {
+    dm_manager->update();
   }
 
   // toggle every 3000 ms
@@ -58,10 +71,15 @@ void loop() {
     toggle_sign = !toggle_sign;
   }
 
-  // send DM velocity with alternating sign (0.1 RPS)
-  if (dm_motor) {
-    float dm_rps = toggle_sign ? -0.2f : 0.2f;
-    dm_motor->sendVelocityRPS(dm_rps);
+  if (dm_motorA && dm_motorB) {
+    // Send commands based on each other's feedback
+    float pos1 = dm_motorA->getPosition();
+    float pos2 = dm_motorB->getPosition();
+    const float kp = 5.0f;
+    const float kd = 2.0f;
+
+    dm_motorA->sendMIT(pos2, 0.0f, kp, kd, 0.0f);
+    dm_motorB->sendMIT(pos1, 0.0f, kp, kd, 0.0f);
   }
 
   float kp = 100;
@@ -79,15 +97,24 @@ void loop() {
   Serial.print(c6x0.getPosition(C610_ID_1));
   Serial.print(" deg, RPS: ");
   Serial.print(rps);
-  if (dm_motor) {
-    Serial.print("\t DM_Status: ");
-    Serial.print(dm_motor->getStatus());
-    Serial.print(", DM_Pos_Deg: ");
-    Serial.print(dm_motor->getPositionDeg());
-    Serial.print(", DM_Vel_RPS: ");
-    Serial.print(dm_motor->getRPS());
-    Serial.print(", DM_Torque: ");
-    Serial.print(dm_motor->getTorque());
+  if (dm_motorA && dm_motorB) {
+    Serial.print("\t DM_Status A: ");
+    Serial.print(static_cast<int>(dm_motorA->getStatus()));
+    Serial.print(", DM_Pos_Deg A: ");
+    Serial.print(dm_motorA->getPositionDeg());
+    Serial.print(", DM_Vel_RPS A: ");
+    Serial.print(dm_motorA->getRPS());
+    Serial.print(", DM_Torque A: ");
+    Serial.print(dm_motorA->getTorque());
+
+    Serial.print("\t DM_Status B: ");
+    Serial.print(static_cast<int>(dm_motorB->getStatus()));
+    Serial.print(", DM_Pos_Deg B: ");
+    Serial.print(dm_motorB->getPositionDeg());
+    Serial.print(", DM_Vel_RPS B: ");
+    Serial.print(dm_motorB->getRPS());
+    Serial.print(", DM_Torque B: ");
+    Serial.print(dm_motorB->getTorque());
   }
   Serial.println();
 

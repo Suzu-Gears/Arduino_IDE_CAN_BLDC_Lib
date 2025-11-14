@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <map>
+#include <set>
 
 #include <api/HardwareCAN.h>
 
@@ -24,14 +26,10 @@ public:
   CANClient(CANHub* hub) : hub_(hub) {}
 
   // Add a single exact ID subscription
-  void addId(uint32_t id) {
-    ids_.push_back(id);
-  }
+  void addId(uint32_t id);
 
   // Add a range subscription: [start, start+count)
-  void addRange(uint32_t start, uint32_t count) {
-    ranges_.emplace_back(start, start + count);
-  }
+  void addRange(uint32_t start, uint32_t count);
 
   // Check buffer (this triggers hub poll to collect incoming messages)
   size_t available() override;
@@ -48,17 +46,14 @@ public:
 
 private:
   friend class CANHub;
-  bool matches(uint32_t id) const {
+  bool matchesRange(uint32_t id) const {
     for (auto& r : ranges_) {
       if (id >= r.first && id < r.second) return true;
     }
-    for (auto& v : ids_)
-      if (id == v) return true;
     return false;
   }
 
   CANHub* hub_ = nullptr;
-  std::vector<uint32_t> ids_;
   std::vector<std::pair<uint32_t, uint32_t>> ranges_;
   std::deque<CanMsg> rxq_;
   static constexpr size_t kMaxQueue = 128;
@@ -95,10 +90,26 @@ public:
     while (base_->available()) {
       CanMsg m = base_->read();
       uint32_t id = m.getStandardId();
-      for (auto& cptr : clients_) {
-        CANClient* c = cptr.get();
-        if (c->matches(id)) {
-          if (c->rxq_.size() < CANClient::kMaxQueue) c->rxq_.push_back(m);
+      
+      std::set<CANClient*> recipients;
+
+      // Find recipients from specific ID subscriptions
+      auto it = id_subscriptions_.find(id);
+      if (it != id_subscriptions_.end()) {
+        recipients.insert(it->second.begin(), it->second.end());
+      }
+
+      // Find recipients from range subscriptions
+      for (CANClient* c : range_subscription_clients_) {
+        if (c->matchesRange(id)) {
+          recipients.insert(c);
+        }
+      }
+
+      // Deliver message
+      for (CANClient* c : recipients) {
+        if (c->rxq_.size() < CANClient::kMaxQueue) {
+          c->rxq_.push_back(m);
         }
       }
     }
@@ -129,11 +140,34 @@ public:
   }
 
 private:
+  friend class CANClient;
+  void subscribeId(uint32_t id, CANClient* client) {
+    id_subscriptions_[id].push_back(client);
+  }
+
+  void subscribeRange(CANClient* client) {
+    // Avoid adding duplicates
+    if (std::find(range_subscription_clients_.begin(), range_subscription_clients_.end(), client) == range_subscription_clients_.end()) {
+      range_subscription_clients_.push_back(client);
+    }
+  }
+
   arduino::HardwareCAN* base_ = nullptr;
   std::vector<std::unique_ptr<CANClient>> clients_;
+  std::map<uint32_t, std::vector<CANClient*>> id_subscriptions_;
+  std::vector<CANClient*> range_subscription_clients_;
 };
 
 // CANClient method implementations that need CANHub definition
+inline void CANClient::addId(uint32_t id) {
+  if (hub_) hub_->subscribeId(id, this);
+}
+
+inline void CANClient::addRange(uint32_t start, uint32_t count) {
+  ranges_.emplace_back(start, start + count);
+  if (hub_) hub_->subscribeRange(this);
+}
+
 inline size_t CANClient::available() {
   if (hub_) hub_->poll();
   return rxq_.size();
