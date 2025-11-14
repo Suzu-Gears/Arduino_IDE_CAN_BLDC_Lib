@@ -8,9 +8,8 @@ const uint8_t slaveId_A = 1;
 const uint8_t slaveId_B = 2;
 const uint8_t UserButtonPin = 29;
 
-
-DM::Motor motor1(&CAN, masterId, slaveId_A, DM::DM_ControlMode::DM_CM_POS_VEL);
-DM::Motor motor2(&CAN, masterId, slaveId_B, DM::DM_ControlMode::DM_CM_POS_VEL);
+DMMotor motor1(&CAN, masterId, slaveId_A, DM_ControlMode::DM_CM_POS_VEL);
+DMMotor motor2(&CAN, masterId, slaveId_B, DM_ControlMode::DM_CM_POS_VEL);
 
 void setup() {
   // Raspberry Pi Pico固有のCAN初期化手順
@@ -24,8 +23,8 @@ void setup() {
   delay(1000);
   motor1.initialize();
   motor2.initialize();
-  motor1.setControlMode(DM::DM_CM_MIT);
-  motor2.setControlMode(DM::DM_CM_MIT);
+  motor1.setControlMode(DM_CM_MIT);
+  motor2.setControlMode(DM_CM_MIT);
   motor1.setZeroPoint();
   motor2.setZeroPoint();
   motor1.enable();

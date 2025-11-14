@@ -11,8 +11,6 @@
 #include <api/HardwareCAN.h>
 
 
-namespace DM {
-
 // Default Mapping Ranges
 /* DM4310~DMG6220 from https://github.com/cmjang/DM_Control_Python/blob/main/DM_CAN.py
   PMAX    VMAX    TMAX    Model
@@ -99,9 +97,9 @@ enum DM_Status {
   DM_STATUS_OVER_LOAD = 0x0E,       // 過負荷
 };
 
-class Motor {
+class DMMotor {
 public:
-  Motor(arduino::HardwareCAN *can, uint32_t masterId, uint32_t slaveId, DM_ControlMode mode)
+  DMMotor(arduino::HardwareCAN *can, uint32_t masterId, uint32_t slaveId, DM_ControlMode mode)
     : can_(can), feedback_(), mappingrange_(), masterId_(masterId), slaveId_(slaveId), currentMode_(mode) {}
 
   void initialize() {
@@ -418,4 +416,3 @@ private:
     return (uint16_t)(normalized * ((1 << bits) - 1));
   }
 };
-}  // namespace DM
