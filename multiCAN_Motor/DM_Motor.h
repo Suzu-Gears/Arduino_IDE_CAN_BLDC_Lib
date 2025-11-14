@@ -104,6 +104,11 @@ public:
   static constexpr int FEEDBACK_STATUS_SHIFT = 4;
   static constexpr uint8_t FEEDBACK_STATUS_MASK = 0x0F;
 
+  static uint8_t getSlaveIdFromMessage(const CanMsg& msg) {
+    // This assumes the lower 4 bits of the first data byte contain the slave ID.
+    return msg.data[0] & FEEDBACK_SLAVE_ID_MASK;
+  }
+
   DMMotor(arduino::HardwareCAN *can, uint32_t masterId, uint32_t slaveId, DM_ControlMode mode)
     : can_(can), masterId_(masterId), slaveId_(slaveId), currentMode_(mode) {}
 
