@@ -11,8 +11,6 @@
 #include <api/HardwareCAN.h>
 
 
-namespace DM {
-
 // Default Mapping Ranges
 /* DM4310~DMG6220 from https://github.com/cmjang/DM_Control_Python/blob/main/DM_CAN.py
   PMAX    VMAX    TMAX    Model
@@ -32,13 +30,13 @@ namespace DM {
   12.5f, 200.0f,  10.0f,  DM2325
 */
 
-enum class DM_ControlMode : uint32_t {
+enum DM_ControlMode : uint32_t {
   DM_CM_MIT = 1,
   DM_CM_POS_VEL = 2,
   DM_CM_VEL = 3,
 };
 
-enum class DM_RID : uint8_t {
+enum DM_RID : uint8_t {
   DM_RID_UV_Value = 0,
   DM_RID_KT_Value = 1,
   DM_RID_OT_Value = 2,
@@ -85,7 +83,7 @@ enum class DM_RID : uint8_t {
   DM_RID_T_p_m = 80,
 };
 
-enum class DM_Status {
+enum DM_Status {
   DM_STATUS_DISABLED = 0x00,        // モーター無効
   DM_STATUS_ENABLED = 0x01,         // モーター有効
   DM_STATUS_SENSOR_ERROR = 0x05,    // センサー読み取りエラー
@@ -99,9 +97,9 @@ enum class DM_Status {
   DM_STATUS_OVER_LOAD = 0x0E,       // 過負荷
 };
 
-class Motor {
+class DMMotor {
 public:
-  Motor(arduino::HardwareCAN *can, uint32_t masterId, uint32_t slaveId, DM_ControlMode mode)
+  DMMotor(arduino::HardwareCAN *can, uint32_t masterId, uint32_t slaveId, DM_ControlMode mode)
     : can_(can), feedback_(), mappingrange_(), masterId_(masterId), slaveId_(slaveId), currentMode_(mode) {}
 
   void initialize() {
@@ -161,12 +159,12 @@ public:
 
   void setControlMode(DM_ControlMode mode) {
     currentMode_ = mode;
-    sendParamUInt32(DM_RID::DM_RID_CTRL_MODE, static_cast<uint32_t>(mode));
+    sendParamUInt32(DM_RID_CTRL_MODE, static_cast<uint32_t>(mode));
     return;
   }
 
   bool sendMIT(float position_rad, float velocity_rad_s, float kp, float kd, float torque_ff) {
-    if (currentMode_ != DM_ControlMode::DM_CM_MIT) return false;  // only allowed in MIT MODE
+    if (currentMode_ != DM_CM_MIT) return false;  // only allowed in MIT MODE
 
     uint16_t position_raw = floatToUint(position_rad, -getPMAX(), getPMAX(), 16);
     uint16_t velocity_raw = floatToUint(velocity_rad_s, -getVMAX(), getVMAX(), 12);
@@ -190,7 +188,7 @@ public:
   }
 
   bool sendPosition(float position_rad, float velocity_limit_rad_s) {
-    if (currentMode_ != DM_ControlMode::DM_CM_POS_VEL) return false;  // only allowed in POSITION_VELOCITY MODE
+    if (currentMode_ != DM_CM_POS_VEL) return false;  // only allowed in POSITION_VELOCITY MODE
 
     uint32_t position_raw, velocity_raw;
     ::memcpy(&position_raw, &position_rad, sizeof(position_raw));
@@ -220,7 +218,7 @@ public:
   }
 
   bool sendVelocity(float velocity_rad_s) {
-    if (currentMode_ != DM_ControlMode::DM_CM_VEL) return false;  // only allowed in VELOCITY MODE
+    if (currentMode_ != DM_CM_VEL) return false;  // only allowed in VELOCITY MODE
 
     uint32_t raw;
     ::memcpy(&raw, &velocity_rad_s, sizeof(raw));
@@ -263,7 +261,7 @@ public:
 
   uint32_t getMode() {
     uint32_t currentMode = 0;
-    readParamUInt32(DM_RID::DM_RID_CTRL_MODE, currentMode);
+    readParamUInt32(DM_RID_CTRL_MODE, currentMode);
     return (currentMode);
   }
   uint32_t getSlaveId() const {
@@ -277,15 +275,15 @@ public:
   }
 
   float getPMAX() {
-    if (mappingrange_.pmax == 0) readParamFloat(DM_RID::DM_RID_PMAX, mappingrange_.pmax);
+    if (mappingrange_.pmax == 0) readParamFloat(DM_RID_PMAX, mappingrange_.pmax);
     return abs(mappingrange_.pmax);
   }
   float getVMAX() {
-    if (mappingrange_.vmax == 0) readParamFloat(DM_RID::DM_RID_VMAX, mappingrange_.vmax);
+    if (mappingrange_.vmax == 0) readParamFloat(DM_RID_VMAX, mappingrange_.vmax);
     return abs(mappingrange_.vmax);
   }
   float getTMAX() {
-    if (mappingrange_.tmax == 0) readParamFloat(DM_RID::DM_RID_TMAX, mappingrange_.tmax);
+    if (mappingrange_.tmax == 0) readParamFloat(DM_RID_TMAX, mappingrange_.tmax);
     return abs(mappingrange_.tmax);
   }
 
@@ -365,9 +363,9 @@ public:
         if (success) {
           float vf;
           ::memcpy(&vf, &val, sizeof(vf));
-          if (rid == DM_RID::DM_RID_PMAX) mappingrange_.pmax = vf;
-          if (rid == DM_RID::DM_RID_VMAX) mappingrange_.vmax = vf;
-          if (rid == DM_RID::DM_RID_TMAX) mappingrange_.tmax = vf;
+          if (rid == DM_RID_PMAX) mappingrange_.pmax = vf;
+          if (rid == DM_RID_VMAX) mappingrange_.vmax = vf;
+          if (rid == DM_RID_TMAX) mappingrange_.tmax = vf;
         }
         return success;
       }
@@ -403,7 +401,7 @@ private:
   MappingRange mappingrange_;
   uint32_t masterId_ = 0;
   uint32_t slaveId_ = 1;
-  DM_ControlMode currentMode_ = DM_ControlMode::DM_CM_MIT;
+  DM_ControlMode currentMode_ = DM_CM_MIT;
 
   static float uintToFloat(uint16_t x, float min_val, float max_val, int bits) {
     float span = max_val - min_val;
@@ -418,4 +416,3 @@ private:
     return (uint16_t)(normalized * ((1 << bits) - 1));
   }
 };
-}  // namespace DM
