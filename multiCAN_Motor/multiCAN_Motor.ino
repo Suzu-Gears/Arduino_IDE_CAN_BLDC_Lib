@@ -2,47 +2,7 @@
 
 #include "C6x0.h"
 #include "CANManager.h"
-#include "DM_Motor.h" // DMManager.h は DM_Motor.h の中でインクルードされる
-
-// --- Method Implementations for DMManager ---
-// DMManagerのメソッド実装を.inoファイルに配置し、ヘッダの宣言とここで実装する
-// これによりDMManager.hとDM_Motor.hの間の循環依存を回避し、
-// ヘッダオンリーのライブラリとして機能させる
-// (通常は.cppファイルに記述するが、Arduinoの都合上)
-
-DMManager::DMManager(CANHub* hub, uint32_t masterId)
-    : masterId_(masterId) {
-    if (hub) {
-        client_ = hub->createClientWithIds({ masterId_ });
-    }
-}
-
-void DMManager::registerMotor(uint32_t slaveId, DMMotor* motor) {
-    if (motor) {
-        motors_[slaveId] = motor;
-    }
-}
-
-void DMManager::update() {
-    if (!client_) return;
-
-    while (client_->available()) {
-        CanMsg msg = client_->read();
-        
-        if (msg.getStandardId() != masterId_) {
-            continue;
-        }
-
-        uint8_t slaveId = DMMotor::getSlaveIdFromMessage(msg);
-        auto it = motors_.find(slaveId);
-        if (it != motors_.end()) {
-            it->second->processMessage(msg);
-        }
-    }
-}
-
-
-// --- Global Object Declarations ---
+#include "DM_Motor.h"
 
 const uint32_t CAN_TX_PIN = 0;
 const uint32_t CAN_RX_PIN = 1;
