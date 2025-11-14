@@ -48,6 +48,10 @@ void loop() {
   c6x0.update();
   dmManager.update();
 
+  // ★ loopの最初にモーターへの参照を変数に入れておく
+  auto& motorA = dmManager.getMotor(dm_slaveA);
+  auto& motorB = dmManager.getMotor(dm_slaveB);
+
   // toggle every 3000 ms
   unsigned long now = millis();
   if (now - last_toggle_ms >= 3000) {
@@ -55,14 +59,14 @@ void loop() {
     toggle_sign = !toggle_sign;
   }
 
-  // Send commands to DM motors using dot-notation
-  float posA = dmManager.getMotor(dm_slaveA).getPosition();
-  float posB = dmManager.getMotor(dm_slaveB).getPosition();
+  // Send commands to DM motors using dot-notation via local references
+  float posA = motorA.getPosition();
+  float posB = motorB.getPosition();
   const float kp = 5.0f;
   const float kd = 2.0f;
 
-  dmManager.getMotor(dm_slaveA).sendMIT(posB, 0.0f, kp, kd, 0.0f);
-  dmManager.getMotor(dm_slaveB).sendMIT(posA, 0.0f, kp, kd, 0.0f);
+  motorA.sendMIT(posB, 0.0f, kp, kd, 0.0f);
+  motorB.sendMIT(posA, 0.0f, kp, kd, 0.0f);
   
   // Send command to C6x0 motor
   float c6x0_kp = 100;
@@ -73,7 +77,7 @@ void loop() {
   c6x0.setCurrent(C610_ID_1, current_ref);
   c6x0.transmit();
 
-  // Print feedback
+  // Print feedback using local references
   Serial.print("ID: 0x");
   Serial.print(0x201 + C610_ID_1, HEX);
   Serial.print(", Angle: ");
@@ -82,22 +86,22 @@ void loop() {
   Serial.print(rps);
 
   Serial.print("\t DM_Status A: ");
-  Serial.print(static_cast<int>(dmManager.getMotor(dm_slaveA).getStatus()));
+  Serial.print(static_cast<int>(motorA.getStatus()));
   Serial.print(", DM_Pos_Deg A: ");
-  Serial.print(dmManager.getMotor(dm_slaveA).getPositionDeg());
+  Serial.print(motorA.getPositionDeg());
   Serial.print(", DM_Vel_RPS A: ");
-  Serial.print(dmManager.getMotor(dm_slaveA).getRPS());
+  Serial.print(motorA.getRPS());
   Serial.print(", DM_Torque A: ");
-  Serial.print(dmManager.getMotor(dm_slaveA).getTorque());
+  Serial.print(motorA.getTorque());
 
   Serial.print("\t DM_Status B: ");
-  Serial.print(static_cast<int>(dmManager.getMotor(dm_slaveB).getStatus()));
+  Serial.print(static_cast<int>(motorB.getStatus()));
   Serial.print(", DM_Pos_Deg B: ");
-  Serial.print(dmManager.getMotor(dm_slaveB).getPositionDeg());
+  Serial.print(motorB.getPositionDeg());
   Serial.print(", DM_Vel_RPS B: ");
-  Serial.print(dmManager.getMotor(dm_slaveB).getRPS());
+  Serial.print(motorB.getRPS());
   Serial.print(", DM_Torque B: ");
-  Serial.print(dmManager.getMotor(dm_slaveB).getTorque());
+  Serial.print(motorB.getTorque());
   
   Serial.println();
 
