@@ -30,15 +30,8 @@ DMMotor::DMMotor(DMManager* manager, uint32_t slaveId, DM_ControlMode mode)
 }
 
 void DMMotor::attachCAN(arduino::HardwareCAN* can, uint32_t masterId) {
-  Serial.print("Attaching CAN to motor with Slave ID: ");
-  Serial.println(slaveId_);
   can_ = can;
   masterId_ = masterId;
-  if (can_ == nullptr) {
-    Serial.println("  -> CAN interface is NULL!");
-  } else {
-    Serial.println("  -> CAN interface is VALID.");
-  }
 }
 
 uint8_t DMMotor::getSlaveIdFromMessage(const CanMsg& msg) {
@@ -79,19 +72,10 @@ void DMMotor::update() {
 }
 
 bool DMMotor::enable() {
-  Serial.print("Enabling motor with Slave ID: ");
-  Serial.print(slaveId_);
   if (!can_) {
-    Serial.println(" -> FAILED (CAN interface is NULL)");
     return false;
   }
-  Serial.println(" -> Sending command...");
   bool success = sendSystemCommand(0xFC);
-  if (success) {
-    Serial.println("  -> Success.");
-  } else {
-    Serial.println("  -> FAILED (write error).");
-  }
   return success;
 }
 bool DMMotor::disable() {
@@ -320,7 +304,6 @@ DMManager::DMManager(uint32_t masterId, arduino::HardwareCAN* can_interface)
     propagateCANSettings();
   }
 }
-
 void DMManager::setCAN(arduino::HardwareCAN* can_interface) {
   can_interface_ = can_interface;
   propagateCANSettings();

@@ -88,9 +88,10 @@ public:
   uint32_t getMasterId() const;
 private:
   void propagateCANSettings();
-      arduino::HardwareCAN* can_interface_;
-      uint32_t masterId_;
-      std::map<uint32_t, DMMotor*> motors_;};
+  arduino::HardwareCAN* can_interface_;
+  uint32_t masterId_;
+  std::map<uint32_t, DMMotor*> motors_;
+};
 
 // --- DMMotor Definition ---
 class DMMotor {
