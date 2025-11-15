@@ -52,18 +52,32 @@ void DMMotor::initialize() {
 
 void DMMotor::processMessage(const CanMsg& msg) {
   if (!is_initialized_) return;
-  if (msg.getStandardId() == masterId_) {
-    if ((msg.data[0] & 0x0F) == slaveId_) {
-      feedback_->status = static_cast<DM_Status>((msg.data[0] >> 4) & 0x0F);
-      uint16_t pos_raw = (uint16_t)(msg.data[1] << 8 | msg.data[2]);
-      uint16_t vel_raw = (uint16_t)((msg.data[3] << 4) | (msg.data[4] >> 4));
-      uint16_t torque_raw = (uint16_t)(((msg.data[4] & 0x0F) << 8) | msg.data[5]);
-      feedback_->temp_mos = (int8_t)msg.data[6];
-      feedback_->temp_rotor = (int8_t)msg.data[7];
-      feedback_->position = uintToFloat(pos_raw, -getPMAX(), getPMAX(), 16);
-      feedback_->velocity = uintToFloat(vel_raw, -getVMAX(), getVMAX(), 12);
-      feedback_->torque = uintToFloat(torque_raw, -getTMAX(), getTMAX(), 12);
-    }
+
+  // このモーター宛のメッセージか確認 (マスターIDが一致し、かつフレーム内のスレーブIDが一致)
+  if (msg.getStandardId() == masterId_ && (msg.data[0] & 0x0F) == slaveId_) {
+    // CANフレームのデータレイアウトに従って値をデコード
+    // data[0]: [ステータス(4bit), スレーブID(4bit)]
+    feedback_->status = static_cast<DM_Status>((msg.data[0] >> 4) & 0x0F);
+    
+    // data[1-2]: 位置データ (16bit)
+    uint16_t pos_raw = (uint16_t)(msg.data[1] << 8 | msg.data[2]);
+    
+    // data[3]とdata[4]の上位4bit: 速度データ (12bit)
+    uint16_t vel_raw = (uint16_t)((msg.data[3] << 4) | (msg.data[4] >> 4));
+    
+    // data[4]の下位4bitとdata[5]: トルクデータ (12bit)
+    uint16_t torque_raw = (uint16_t)(((msg.data[4] & 0x0F) << 8) | msg.data[5]);
+    
+    // data[6]: MOSFET温度
+    feedback_->temp_mos = (int8_t)msg.data[6];
+    
+    // data[7]: ローター温度
+    feedback_->temp_rotor = (int8_t)msg.data[7];
+
+    // RAW値を物理量に変換
+    feedback_->position = uintToFloat(pos_raw, -getPMAX(), getPMAX(), 16);
+    feedback_->velocity = uintToFloat(vel_raw, -getVMAX(), getVMAX(), 12);
+    feedback_->torque = uintToFloat(torque_raw, -getTMAX(), getTMAX(), 12);
   }
 }
 
@@ -96,6 +110,7 @@ void DMMotor::setControlMode(DM_ControlMode mode) {
 bool DMMotor::sendMIT(float position_rad, float velocity_rad_s, float kp, float kd, float torque_ff) {
   if (currentMode_ != DM_ControlMode::DM_CM_MIT) return false;  // only allowed in MIT MODE
 
+  // 物理量をRAW値に変換
   uint16_t position_raw = floatToUint(position_rad, -getPMAX(), getPMAX(), 16);
   uint16_t velocity_raw = floatToUint(velocity_rad_s, -getVMAX(), getVMAX(), 12);
   uint16_t kp_raw = floatToUint(kp, 0.0f, 500.0f, 12);
@@ -105,13 +120,21 @@ bool DMMotor::sendMIT(float position_rad, float velocity_rad_s, float kp, float 
   CanMsg tx = {};
   tx.id = slaveId_;
   tx.data_length = 8;
+
+  // CANフレームのデータレイアウトに従って値をエンコード
+  // [P_des(16), V_des(12), Kp(12), Kd(12), T_ff(12)]
+  // P_des: 16bit (data[0], data[1])
   tx.data[0] = static_cast<uint8_t>(position_raw >> 8);
   tx.data[1] = static_cast<uint8_t>(position_raw & 0xFF);
+  // V_des: 12bit (data[2], data[3]の上位4bit)
   tx.data[2] = static_cast<uint8_t>(velocity_raw >> 4);
-  tx.data[3] = static_cast<uint8_t>((velocity_raw & 0x0F) << 4) | (kp_raw >> 8);
+  // Kp: 12bit (data[3]の下位4bit, data[4])
+  tx.data[3] = static_cast<uint8_t>(((velocity_raw & 0x0F) << 4) | (kp_raw >> 8));
   tx.data[4] = static_cast<uint8_t>(kp_raw & 0xFF);
+  // Kd: 12bit (data[5], data[6]の上位4bit)
   tx.data[5] = static_cast<uint8_t>(kd_raw >> 4);
-  tx.data[6] = static_cast<uint8_t>((kd_raw & 0x0F) << 4) | (torque_raw >> 8);
+  // T_ff: 12bit (data[6]の下位4bit, data[7])
+  tx.data[6] = static_cast<uint8_t>(((kd_raw & 0x0F) << 4) | (torque_raw >> 8));
   tx.data[7] = static_cast<uint8_t>(torque_raw & 0xFF);
 
   return can_->write(tx) >= 0;
@@ -284,18 +307,39 @@ bool DMMotor::sendSystemCommand(uint8_t cmd) {
   return can_->write(tx) >= 0;
 }
 
+/**
+ * @brief 符号なし整数を、指定された範囲とビット数に基づいて浮動小数点数に変換します。
+ * @param x 変換する符号なし整数。
+ * @param min_val マッピング範囲の最小値。
+ * @param max_val マッピング範囲の最大値。
+ * @param bits 整数のビット数。
+ * @return float 変換された浮動小数点数。
+ */
 float DMMotor::uintToFloat(uint16_t x, float min_val, float max_val, int bits) {
   float span = max_val - min_val;
   if (span == 0.0f) return min_val;  // Avoid division by zero
+  // 整数値を[0, 1]の範囲に正規化
   float normalized = (float)x / (float)((1 << bits) - 1);
+  // 正規化された値を、指定された物理量の範囲にスケール
   return normalized * span + min_val;
 }
 
+/**
+ * @brief 浮動小数点数を、指定された範囲とビット数に基づいて符号なし整数に変換します。
+ * @param x 変換する浮動小数点数。
+ * @param min_val マッピング範囲の最小値。
+ * @param max_val マッピング範囲の最大値。
+ * @param bits 整数のビット数。
+ * @return uint16_t 変換された符号なし整数。
+ */
 uint16_t DMMotor::floatToUint(float x, float min_val, float max_val, int bits) {
   float span = max_val - min_val;
   if (span <= 0.0f) return 0;
+  // 値を範囲内にクランプ
   float clamped_x = std::clamp(x, min_val, max_val);
+  // 物理量を[0, 1]の範囲に正規化
   float normalized = (clamped_x - min_val) / span;
+  // 正規化された値を、指定されたビット数の整数にスケール
   return (uint16_t)(normalized * ((1 << bits) - 1));
 }
 
