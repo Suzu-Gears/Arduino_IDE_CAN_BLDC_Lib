@@ -11,36 +11,49 @@
 
 #include <api/HardwareCAN.h>
 
-// CANHub + CANClient
-// CANHub: single reader from physical arduino::HardwareCAN; demultiplexes
-// messages to multiple CANClient objects. Each CANClient behaves like a
-// lightweight arduino::HardwareCAN that only exposes messages matching its
-// subscription (individual IDs and/or ranges). Writes from clients are
-// forwarded to the underlying physical CAN.
+class CANHub;   // forward
+class CANClient; // forward
 
-class CANHub;  // forward
-
-class CANClient : public arduino::HardwareCAN {
+/**
+ * @brief ユーザーが直接扱うための、軽量なCANClientのハンドルクラス。
+ * arduino::HardwareCANを継承しているため、setCAN()に渡すことができる。
+ * このクラス自体はコピー可能で、ポインタのように扱う必要がない。
+ */
+class CANClientHandle : public arduino::HardwareCAN {
 public:
-  // `hub` is owner that distributes messages.
-  CANClient(CANHub* hub) : hub_(hub) {}
+  CANClientHandle(CANClient* client = nullptr) : client_(client) {}
 
-  // Add a single exact ID subscription
+  // arduino::HardwareCANの仮想メソッドをオーバーライドし、
+  // 実際の処理を内部のCANClientオブジェクトに転送する。
+  size_t available() override;
+  CanMsg read() override;
+  int write(const CanMsg& msg) override;
+  bool begin(CanBitRate const can_bitrate) override;
+  void end() override;
+
+  // CANClientが持つ購読メソッドも転送する。
   void addId(uint32_t id);
-
-  // Add a range subscription: [start, start+count)
   void addRange(uint32_t start, uint32_t count);
 
-  // Check buffer (this triggers hub poll to collect incoming messages)
+private:
+  CANClient* client_;
+};
+
+
+/**
+ * @brief CANメッセージのフィルターとバッファを持つ、CANClientの実体。
+ * このクラスはCANHubによって内部的に所有・管理される。
+ */
+class CANClient : public arduino::HardwareCAN {
+public:
+  CANClient(CANHub* hub) : hub_(hub) {}
+
+  void addId(uint32_t id);
+  void addRange(uint32_t start, uint32_t count);
+
   size_t available() override;
-
-  // Read next message
   CanMsg read() override;
-
-  // Write forwards to hub which forwards to physical CAN
   int write(const CanMsg& msg) override;
-
-  // Begin/end forwarded to hub
   bool begin(CanBitRate const can_bitrate) override;
   void end() override;
 
@@ -59,32 +72,32 @@ private:
   static constexpr size_t kMaxQueue = 128;
 };
 
+
+/**
+ * @brief 物理CANからメッセージを読み取り、各CANClientに分配するハブクラス。
+ */
 class CANHub : public arduino::HardwareCAN {
 public:
   CANHub(arduino::HardwareCAN* base) : base_(base) {}
 
-  // Create a new client; caller should keep the pointer alive (we own it)
-  CANClient* createClient() {
+  // createClient...メソッドがCANClientHandleを返すように変更
+  CANClientHandle createClient() {
     clients_.emplace_back(std::make_unique<CANClient>(this));
-    return clients_.back().get();
+    return CANClientHandle(clients_.back().get());
   }
 
-  // Convenience: create client and add a list of ids
-  CANClient* createClientWithIds(std::initializer_list<uint32_t> ids) {
-    CANClient* c = createClient();
-    for (auto id : ids) c->addId(id);
+  CANClientHandle createClientWithIds(std::initializer_list<uint32_t> ids) {
+    CANClientHandle c = createClient();
+    for (auto id : ids) c.addId(id);
     return c;
   }
 
-  // Convenience: create client and add a range [start, start+count)
-  CANClient* createClientWithRange(uint32_t start, uint32_t count) {
-    CANClient* c = createClient();
-    c->addRange(start, count);
+  CANClientHandle createClientWithRange(uint32_t start, uint32_t count) {
+    CANClientHandle c = createClient();
+    c.addRange(start, count);
     return c;
   }
 
-  // Poll the physical CAN and distribute messages to clients' queues.
-  // Safe to call repeatedly; it will drain available messages.
   void poll() {
     if (base_ == nullptr) return;
     while (base_->available()) {
@@ -93,20 +106,17 @@ public:
 
       std::set<CANClient*> recipients;
 
-      // Find recipients from specific ID subscriptions
       auto it = id_subscriptions_.find(id);
       if (it != id_subscriptions_.end()) {
         recipients.insert(it->second.begin(), it->second.end());
       }
 
-      // Find recipients from range subscriptions
       for (CANClient* c : range_subscription_clients_) {
         if (c->matchesRange(id)) {
           recipients.insert(c);
         }
       }
 
-      // Deliver message
       for (CANClient* c : recipients) {
         if (c->rxq_.size() < CANClient::kMaxQueue) {
           c->rxq_.push_back(m);
@@ -115,13 +125,11 @@ public:
     }
   }
 
-  // Forward writes to the physical CAN
   int write(const CanMsg& msg) override {
     if (base_ == nullptr) return -1;
     return base_->write(msg);
   }
 
-  // The hub itself can expose the physical available/read if needed
   size_t available() override {
     return base_ ? base_->available() : 0;
   }
@@ -146,7 +154,6 @@ private:
   }
 
   void subscribeRange(CANClient* client) {
-    // Avoid adding duplicates
     if (std::find(range_subscription_clients_.begin(), range_subscription_clients_.end(), client) == range_subscription_clients_.end()) {
       range_subscription_clients_.push_back(client);
     }
@@ -158,7 +165,17 @@ private:
   std::vector<CANClient*> range_subscription_clients_;
 };
 
-// CANClient method implementations that need CANHub definition
+// --- CANClientHandleの実装 ---
+inline size_t CANClientHandle::available() { return client_ ? client_->available() : 0; }
+inline CanMsg CANClientHandle::read() { return client_ ? client_->read() : CanMsg{}; }
+inline int CANClientHandle::write(const CanMsg& msg) { return client_ ? client_->write(msg) : -1; }
+inline bool CANClientHandle::begin(CanBitRate const can_bitrate) { return client_ ? client_->begin(can_bitrate) : false; }
+inline void CANClientHandle::end() { if (client_) client_->end(); }
+inline void CANClientHandle::addId(uint32_t id) { if (client_) client_->addId(id); }
+inline void CANClientHandle::addRange(uint32_t start, uint32_t count) { if (client_) client_->addRange(start, count); }
+
+
+// --- CANClientの実装 ---
 inline void CANClient::addId(uint32_t id) {
   if (hub_) hub_->subscribeId(id, this);
 }
