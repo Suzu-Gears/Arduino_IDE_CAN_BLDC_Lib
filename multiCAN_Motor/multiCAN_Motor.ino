@@ -1,6 +1,6 @@
 #include <RP2040PIO_CAN.h>
 
-#include "C6x0.h"
+#include <C6x0.h>
 #include "CANManager.h"
 #include "DM.h"
 
