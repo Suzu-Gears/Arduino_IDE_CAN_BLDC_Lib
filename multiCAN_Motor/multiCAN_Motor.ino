@@ -4,6 +4,18 @@
 #include "CANManager.h"
 #include "DM.h"
 
+// 各セグメント(a～g, dp)のピン番号を指定して0～9を順に表示します
+// セグメントのピン番号を指定（必要に応じて変更してください）
+const int segA = 10;  // a
+const int segB = 11;  // b
+const int segC = 6;   // c
+const int segD = 9;   // d
+const int segE = 8;   // e
+const int segF = 12;  // f
+const int segG = 13;  // g
+const int segDP = 7;  // dp（小数点）
+const int segPins[7] = { segA, segB, segC, segD, segE, segF, segG };
+
 const uint32_t CAN_TX_PIN = 0;
 const uint32_t CAN_RX_PIN = 1;
 
@@ -13,13 +25,17 @@ const uint32_t dm_slaveID_B = 10;
 
 CANHub canHub(&CAN);
 
-CANClientHandle c6x0_client = canHub.createClientWithRange(0x201, 8);
-CANClientHandle dm_client = canHub.createClientWithIds({ dm_masterID });
+CANClientHandle c6x0_client = canHub.createClientWithRange(0x201, 8, 1);     //ID0x201～0x208を購読し、キューサイズ1でオーバーフロー時に最新を破棄
+CANClientHandle dm_client = canHub.createClientWithIds({ dm_masterID }, 2);  //ID0x0を購読し、キューサイズ4でオーバーフロー時に最新を破棄
 
 C6x0 c6x0;
 DMManager dmManager(dm_masterID);
 DMMotor motorA(&dmManager, dm_slaveID_A, DM_ControlMode::DM_CM_POS_VEL);
 DMMotor motorB(&dmManager, dm_slaveID_B, DM_ControlMode::DM_CM_POS_VEL);
+
+void handleC6x0Overflow() {
+  digitalWrite(segDP, HIGH);
+}
 
 bool toggle_sign = false;
 unsigned long last_toggle_ms = 0;
@@ -35,6 +51,14 @@ void setup() {
   CAN.setRX(CAN_RX_PIN);
   CAN.begin(CanBitRate::BR_1000k);
 
+  c6x0_client.setOverflowPolicy(CANClientHandle::OverflowPolicy::DropOldest);
+  c6x0_client.onQueueOverflow(handleC6x0Overflow);
+  dm_client.setOverflowPolicy(CANClientHandle::OverflowPolicy::DropNewest);
+  dm_client.onQueueOverflow([]() {
+    digitalWrite(segG, HIGH);
+  });
+
+
   c6x0.setCAN(&c6x0_client);
   dmManager.setCAN(&dm_client);
 
@@ -45,6 +69,13 @@ void setup() {
   motorA.enable();
   motorB.enable();
 
+  // 各セグメントピンを出力に設定
+  for (int i = 0; i < 7; i++) {
+    pinMode(segPins[i], OUTPUT);
+    digitalWrite(segPins[i], LOW);  // 初期状態OFF
+  }
+  pinMode(segDP, OUTPUT);
+  digitalWrite(segDP, LOW);  // dp初期状態OFF
   last_toggle_ms = millis();
 }
 

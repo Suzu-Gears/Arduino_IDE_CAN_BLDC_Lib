@@ -8,6 +8,7 @@
 #include <memory>
 #include <map>
 #include <set>
+#include <functional> // for std::function
 
 #include <api/HardwareCAN.h>
 
@@ -21,7 +22,7 @@ class CANClient; // forward
  */
 class CANClientHandle : public arduino::HardwareCAN {
 public:
-    CANClientHandle(CANClient* client = nullptr) : client_(client) {}
+    CANClientHandle(CANClient* client = nullptr);
 
     // arduino::HardwareCANの仮想メソッドをオーバーライドし、
     // 実際の処理を内部のCANClientオブジェクトに転送する。
@@ -34,6 +35,11 @@ public:
     // CANClientが持つ購読メソッドも転送する。
     void addId(uint32_t id);
     void addRange(uint32_t start, uint32_t count);
+
+    // キュー管理メソッド
+    enum class OverflowPolicy { DropNewest, DropOldest };
+    void setOverflowPolicy(OverflowPolicy policy);
+    void onQueueOverflow(std::function<void()> callback);
 
 private:
     CANClient* client_;
@@ -48,8 +54,11 @@ private:
  */
 class CANClient : public arduino::HardwareCAN {
 public:
+    using OverflowPolicy = CANClientHandle::OverflowPolicy;
+
     // `hub`はメッセージを分配するオーナー
-    explicit CANClient(CANHub* hub) noexcept : hub_(hub) {}
+    explicit CANClient(CANHub* hub, size_t queue_size) noexcept 
+        : hub_(hub), max_queue_size_(queue_size) {}
 
     // 単一のIDを購読
     void addId(uint32_t id);
@@ -64,6 +73,14 @@ public:
     size_t available() noexcept override;
     CanMsg read() noexcept override;
 
+    // キュー管理
+    void setOverflowPolicy(OverflowPolicy policy) {
+        overflow_policy_ = policy;
+    }
+    void onQueueOverflow(std::function<void()> callback) {
+        overflow_callback_ = callback;
+    }
+
 private:
     friend class CANHub;
     bool matchesRange(uint32_t id) const noexcept {
@@ -74,15 +91,26 @@ private:
     }
 
     void push(const CanMsg& msg) {
-        if (rxq_.size() < kMaxQueue) {
+        if (rxq_.size() < max_queue_size_) {
             rxq_.push_back(msg);
+        } else {
+            if (overflow_callback_) {
+                overflow_callback_();
+            }
+            if (overflow_policy_ == OverflowPolicy::DropOldest) {
+                rxq_.pop_front();
+                rxq_.push_back(msg);
+            }
+            // DropNewest (default) の場合は何もしない
         }
     }
 
     CANHub* hub_ = nullptr;
     std::vector<std::pair<uint32_t, uint32_t>> ranges_;
     std::deque<CanMsg> rxq_;
-    static constexpr size_t kMaxQueue = 128;
+    size_t max_queue_size_;
+    OverflowPolicy overflow_policy_ = OverflowPolicy::DropNewest;
+    std::function<void()> overflow_callback_ = nullptr;
 };
 
 /**
@@ -98,28 +126,28 @@ public:
     CANHub& operator=(const CANHub&) = delete;
 
     // クライアントを作成 (所有権はHubが持つ)
-    CANClientHandle createClient() {
-        clients_.emplace_back(std::make_unique<CANClient>(this));
+    CANClientHandle createClient(size_t queue_size = 128) {
+        clients_.emplace_back(std::make_unique<CANClient>(this, queue_size));
         return CANClientHandle(clients_.back().get());
     }
 
     template<typename T>
-    CANClientHandle createClientWithIds(const T& ids) {
-        CANClientHandle c = createClient();
+    CANClientHandle createClientWithIds(const T& ids, size_t queue_size = 128) {
+        CANClientHandle c = createClient(queue_size);
         for (const uint32_t id : ids) {
             c.addId(id);
         }
         return c;
     }
 
-    CANClientHandle createClientWithIds(std::initializer_list<uint32_t> ids) {
-        CANClientHandle c = createClient();
+    CANClientHandle createClientWithIds(std::initializer_list<uint32_t> ids, size_t queue_size = 128) {
+        CANClientHandle c = createClient(queue_size);
         for (auto id : ids) c.addId(id);
         return c;
     }
 
-    CANClientHandle createClientWithRange(uint32_t start, uint32_t count) {
-        CANClientHandle c = createClient();
+    CANClientHandle createClientWithRange(uint32_t start, uint32_t count, size_t queue_size = 128) {
+        CANClientHandle c = createClient(queue_size);
         c.addRange(start, count);
         return c;
     }
@@ -177,6 +205,7 @@ private:
 };
 
 // --- CANClientHandle メソッドの実装 ---
+inline CANClientHandle::CANClientHandle(CANClient* client) : client_(client) {}
 inline bool CANClientHandle::begin(CanBitRate const can_bitrate) { return client_ ? client_->begin(can_bitrate) : false; }
 inline void CANClientHandle::end() noexcept { if (client_) client_->end(); }
 inline int CANClientHandle::write(const CanMsg& msg) { return client_ ? client_->write(msg) : -1; }
@@ -184,6 +213,8 @@ inline size_t CANClientHandle::available() noexcept { return client_ ? client_->
 inline CanMsg CANClientHandle::read() noexcept { return client_ ? client_->read() : CanMsg{}; }
 inline void CANClientHandle::addId(uint32_t id) { if (client_) client_->addId(id); }
 inline void CANClientHandle::addRange(uint32_t start, uint32_t count) { if (client_) client_->addRange(start, count); }
+inline void CANClientHandle::setOverflowPolicy(OverflowPolicy policy) { if (client_) client_->setOverflowPolicy(policy); }
+inline void CANClientHandle::onQueueOverflow(std::function<void()> callback) { if (client_) client_->onQueueOverflow(callback); }
 
 
 // --- CANClient メソッドの実装 ---
