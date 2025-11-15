@@ -16,8 +16,9 @@ CANHub canHub(&CAN);
 CANClientHandle c6x0_client = canHub.createClientWithRange(0x201, 8);
 CANClientHandle dm_client = canHub.createClientWithIds({ dm_masterID });
 
+// 3. モーターコントローラを宣言
 C6x0 c6x0;
-DMManager dmManager;
+DMManager dmManager(dm_masterID);
 DMMotor motorA(&dmManager, dm_slaveID_A, DM_ControlMode::DM_CM_POS_VEL);
 DMMotor motorB(&dmManager, dm_slaveID_B, DM_ControlMode::DM_CM_POS_VEL);
 
@@ -37,7 +38,6 @@ void setup() {
 
   c6x0.setCAN(&c6x0_client);
   dmManager.setCAN(&dm_client);
-  dmManager.setMasterID(dm_masterID);
 
   motorA.initialize();
   motorB.initialize();

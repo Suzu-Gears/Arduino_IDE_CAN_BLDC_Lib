@@ -80,9 +80,8 @@ enum class DM_Status : uint8_t {
 // --- DMManager Definition ---
 class DMManager {
 public:
-  DMManager();
+  DMManager(uint32_t masterId, arduino::HardwareCAN* can_interface = nullptr);
   void setCAN(arduino::HardwareCAN* can_interface);
-  void setMasterID(uint32_t masterId);
   void registerMotor(uint32_t slaveId, DMMotor* motor);
   void update();
   arduino::HardwareCAN* getCanInterface() const;
@@ -91,7 +90,6 @@ private:
   void propagateCANSettings();
       arduino::HardwareCAN* can_interface_;
       uint32_t masterId_;
-      bool masterId_is_set_;
       std::map<uint32_t, DMMotor*> motors_;};
 
 // --- DMMotor Definition ---

@@ -314,35 +314,34 @@ uint16_t DMMotor::floatToUint(float x, float min_val, float max_val, int bits) {
 
 
 // --- DMManager Implementations ---
-DMManager::DMManager() : can_interface_(nullptr), masterId_(0), masterId_is_set_(false) {}
+DMManager::DMManager(uint32_t masterId, arduino::HardwareCAN* can_interface) 
+  : can_interface_(can_interface), masterId_(masterId) {
+  if (can_interface_) {
+    propagateCANSettings();
+  }
+}
 
 void DMManager::setCAN(arduino::HardwareCAN* can_interface) {
   can_interface_ = can_interface;
   propagateCANSettings();
 }
 
-void DMManager::setMasterID(uint32_t masterId) {
-  masterId_ = masterId;
-  masterId_is_set_ = true;
-  propagateCANSettings();
-}
-
 void DMManager::registerMotor(uint32_t slaveId, DMMotor* motor) {
   motors_[slaveId] = motor;
-  if (can_interface_ && masterId_is_set_) {
+  if (can_interface_) {
     motor->attachCAN(can_interface_, masterId_);
   }
 }
 
 void DMManager::propagateCANSettings() {
-  if (!can_interface_ || !masterId_is_set_) return;
+  if (!can_interface_) return;
   for (auto const& [id, motor] : motors_) {
     motor->attachCAN(can_interface_, masterId_);
   }
 }
 
 void DMManager::update() {
-  if (!can_interface_ || !masterId_is_set_) return;
+  if (!can_interface_) return;
   while (can_interface_->available()) {
     CanMsg msg = can_interface_->read();
     if (msg.getStandardId() != masterId_) continue;
