@@ -98,7 +98,7 @@ class DMMotor {
 public:
   DMMotor(DMManager* manager, uint32_t slaveId, DM_ControlMode mode);
 
-  void attachCAN(arduino::HardwareCAN* can, uint32_t masterId);
+  void setCAN(arduino::HardwareCAN* can, uint32_t masterId);
 
   static uint8_t getSlaveIdFromMessage(const CanMsg& msg);
   void initialize();

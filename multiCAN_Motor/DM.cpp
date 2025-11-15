@@ -29,7 +29,7 @@ DMMotor::DMMotor(DMManager* manager, uint32_t slaveId, DM_ControlMode mode)
   }
 }
 
-void DMMotor::attachCAN(arduino::HardwareCAN* can, uint32_t masterId) {
+void DMMotor::setCAN(arduino::HardwareCAN* can, uint32_t masterId) {
   can_ = can;
   masterId_ = masterId;
 }
@@ -312,14 +312,14 @@ void DMManager::setCAN(arduino::HardwareCAN* can_interface) {
 void DMManager::registerMotor(uint32_t slaveId, DMMotor* motor) {
   motors_[slaveId] = motor;
   if (can_interface_) {
-    motor->attachCAN(can_interface_, masterId_);
+    motor->setCAN(can_interface_, masterId_);
   }
 }
 
 void DMManager::propagateCANSettings() {
   if (!can_interface_) return;
   for (auto const& [id, motor] : motors_) {
-    motor->attachCAN(can_interface_, masterId_);
+    motor->setCAN(can_interface_, masterId_);
   }
 }
 
