@@ -52,7 +52,7 @@ Here's a basic example of how to use `CANDemux` to create virtual CAN buses:
 `CANDemux` を使って仮想CANバスを作成する基本的な例です。
 
 ```cpp
-#include <RP2040PIO_CAN.h> // Or your specific HardwareCAN library
+#include <Arduino_CAN.h> // Or your specific HardwareCAN library
 #include <CANDemux.h>
 
 // Assuming 'CAN' is your arduino::HardwareCAN instance
@@ -60,12 +60,11 @@ CANDemux canDemux(&CAN);
 
 void setup() {
   // Initialize your physical CAN bus
-  CAN.setTX(0);
-  CAN.setRX(1);
   CAN.begin(CanBitRate::BR_1000k);
 
   // Create a virtual CAN bus that subscribes to ID 0x100
-  VirtualCAN myVirtualBus = canDemux.createClientWithIds({0x100});
+  VirtualCAN myVirtualBus = canDemux.createClientWithIds({ 0x100, 0x101, 0x102, 0x103 });
+  // VirtualCAN myVirtualBus = canDemux.createClientWithRange(0x100, 4);
 
   // You can use myVirtualBus just like a regular HardwareCAN instance
   // For example, to set up another library that expects a HardwareCAN object:
@@ -107,3 +106,25 @@ For a more comprehensive example, refer to the `multiCAN_Motor` example:
 This library is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 このライブラリはMITライセンスの下で公開されています。詳細は [LICENSE](LICENSE) ファイルを参照してください。
+
+## Compatible Hardware / 対応ハードウェア
+
+`CANDemux` は `arduino::HardwareCAN` インターフェースを実装している任意のボードで使用できます。以下に一般的な例を挙げます。
+
+`CANDemux` can be used with any board that implements the `arduino::HardwareCAN` interface. Here are some common examples:
+
+*   **Arduino Uno R4 WiFi / Minima:**
+    *   Library: `<Arduino_CAN.h>` (Built-in)
+    *   ライブラリ: `<Arduino_CAN.h>` (組み込み)
+
+*   **ESP32:**
+    *   Library: `<ESP32_TWAI.h>` (Available via Arduino IDE Library Manager)
+    *   GitHub: [eyr1n/ESP32_TWAI](https://github.com/eyr1n/ESP32_TWAI)
+    *   ライブラリ: `<ESP32_TWAI.h>` (Arduino IDE ライブラリマネージャーから入手可能)
+    *   GitHub: [eyr1n/ESP32_TWAI](https://github.com/eyr1n/ESP32_TWAI)
+
+*   **Raspberry Pi Pico (RP2040):**
+    *   Library: `<RP2040PIO_CAN.h>` (Available via Arduino IDE Library Manager)
+    *   GitHub: [eyr1n/RP2040PIO_CAN](https://github.com/eyr1n/RP2040PIO_CAN)
+    *   ライブラリ: `<RP2040PIO_CAN.h>` (Arduino IDE ライブラリマネージャーから入手可能)
+    *   GitHub: [eyr1n/RP2040PIO_CAN](https://github.com/eyr1n/RP2040PIO_CAN)
