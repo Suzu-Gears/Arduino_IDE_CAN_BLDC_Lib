@@ -23,10 +23,10 @@ const uint32_t dm_masterID = 0;
 const uint32_t dm_slaveID_A = 9;  //DMモーターはSlaveID1~8の場合、速度制御モードの指令のIDが0x201~208となりロボマスモーターののフィードバックと被るので、共存させるなら9より大きいIDを使う
 const uint32_t dm_slaveID_B = 10;
 
-CANDemux canHub(&CAN);
+CANDemux canDemux(&CAN);
 
-CANChannel c6x0_client = canHub.createClientWithRange(0x201, 8, 1);     //ID0x201～0x208を購読し、キューサイズ1でオーバーフロー時に最新を破棄
-CANChannel dm_client = canHub.createClientWithIds({ dm_masterID }, 2);  //ID0x0を購読し、キューサイズ4でオーバーフロー時に最新を破棄
+VirtualCAN c6x0_vcan = canDemux.createClientWithRange(0x201, 8, 1);     //ID0x201～0x208を購読し、キューサイズ1でオーバーフロー時に最新を破棄
+VirtualCAN dm_vcan = canDemux.createClientWithIds({ dm_masterID }, 2);  //ID0x0を購読し、キューサイズ4でオーバーフロー時に最新を破棄
 
 C6x0 c6x0;
 DMManager dmManager(dm_masterID);
@@ -51,16 +51,16 @@ void setup() {
   CAN.setRX(CAN_RX_PIN);
   CAN.begin(CanBitRate::BR_1000k);
 
-  c6x0_client.setOverflowPolicy(CANChannel::OverflowPolicy::DropOldest);
-  c6x0_client.onQueueOverflow(handleC6x0Overflow);
-  dm_client.setOverflowPolicy(CANChannel::OverflowPolicy::DropNewest);
-  dm_client.onQueueOverflow([]() {
+  c6x0_vcan.setOverflowPolicy(VirtualCAN::OverflowPolicy::DropOldest);
+  c6x0_vcan.onQueueOverflow(handleC6x0Overflow);
+  dm_vcan.setOverflowPolicy(VirtualCAN::OverflowPolicy::DropNewest);
+  dm_vcan.onQueueOverflow([]() {
     digitalWrite(segG, HIGH);
   });
 
 
-  c6x0.setCAN(&c6x0_client);
-  dmManager.setCAN(&dm_client);
+  c6x0.setCAN(&c6x0_vcan);
+  dmManager.setCAN(&dm_vcan);
 
   motorA.initialize();
   motorB.initialize();

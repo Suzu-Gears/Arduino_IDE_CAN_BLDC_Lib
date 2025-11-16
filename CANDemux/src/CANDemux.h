@@ -14,16 +14,16 @@
 #include <api/HardwareCAN.h>
 
 class CANDemux;        // forward
-class CANChannelImpl;  // forward
+class VirtualCANImpl;  // forward
 
 /**
- * @brief ユーザーが直接操作するための、軽量なCANチャネルハンドル。
+ * @brief ユーザーが直接操作するための、軽量な仮想CANバスハンドル。
  * arduino::HardwareCANを継承しており、setCAN()などの関数に渡すことが可能。
  * コピー可能で、ポインタ管理の複雑さを伴わない。
  */
-class CANChannel : public arduino::HardwareCAN {
+class VirtualCAN : public arduino::HardwareCAN {
 public:
-  CANChannel(CANChannelImpl* client = nullptr);
+  VirtualCAN(VirtualCANImpl* client = nullptr);
 
   bool begin(CanBitRate const can_bitrate) override;
   void end() noexcept override;
@@ -31,7 +31,7 @@ public:
   size_t available() noexcept override;
   CanMsg read() noexcept override;
 
-  // CANChannelImplが持つ購読メソッドも転送する。
+  // VirtualCANImplが持つ購読メソッドも転送する。
   void addId(uint32_t id);
   void addRange(uint32_t start, uint32_t count);
 
@@ -42,22 +42,22 @@ public:
   void onQueueOverflow(std::function<void()> callback);
 
 private:
-  CANChannelImpl* client_;
+  VirtualCANImpl* client_;
 };
 
 
 /**
- * @class CANChannelImpl
+ * @class VirtualCANImpl
  * @brief 物理CANバスへの仮想インターフェースを実装するクラス。
- * CANDemuxによって特定のCAN IDまたはID範囲のメッセージのみがこのチャネルにルーティングされる。
+ * CANDemuxによって特定のCAN IDまたはID範囲のメッセージのみがこの仮想バスにルーティングされる。
  * arduino::HardwareCANインターフェースを実装する。
  */
-class CANChannelImpl : public arduino::HardwareCAN {
+class VirtualCANImpl : public arduino::HardwareCAN {
 public:
-  using OverflowPolicy = CANChannel::OverflowPolicy;
+  using OverflowPolicy = VirtualCAN::OverflowPolicy;
 
   // `hub`はメッセージを分配するオーナー
-  explicit CANChannelImpl(CANDemux* hub, size_t queue_size) noexcept
+  explicit VirtualCANImpl(CANDemux* hub, size_t queue_size) noexcept
     : hub_(hub), max_queue_size_(queue_size) {}
 
   // 単一のIDを購読
@@ -115,7 +115,7 @@ private:
 
 /**
  * @class CANDemux
- * @brief 物理CANバスを抽象化し、受信メッセージを複数のCANChannelImplインスタンスに分配（デマルチプレクス）する。
+ * @brief 物理CANバスを抽象化し、受信メッセージを複数のVirtualCANImplインスタンスに分配（デマルチプレクス）する。
  */
 class CANDemux {
 public:
@@ -126,40 +126,40 @@ public:
   CANDemux& operator=(const CANDemux&) = delete;
 
   /**
-   * @brief 新しいCANチャネルクライアントを作成する。
-   * 作成されたCANChannelImplインスタンスの所有権はCANDemuxが管理する。
+   * @brief 新しい仮想CANバスクライアントを作成する。
+   * 作成されたVirtualCANImplインスタンスの所有権はCANDemuxが管理する。
    * @param queue_size 受信メッセージキューの最大サイズ。
-   * @return 新しく作成されたCANChannelのハンドル。
+   * @return 新しく作成された仮想CANバスのハンドル。
    */
-  CANChannel createClient(size_t queue_size = 128) {
-    clients_.emplace_back(std::make_unique<CANChannelImpl>(this, queue_size));
-    return CANChannel(clients_.back().get());
+  VirtualCAN createClient(size_t queue_size = 128) {
+    clients_.emplace_back(std::make_unique<VirtualCANImpl>(this, queue_size));
+    return VirtualCAN(clients_.back().get());
   }
 
   template<typename T>
-  CANChannel createClientWithIds(const T& ids, size_t queue_size = 128) {
-    CANChannel c = createClient(queue_size);
+  VirtualCAN createClientWithIds(const T& ids, size_t queue_size = 128) {
+    VirtualCAN c = createClient(queue_size);
     for (const uint32_t id : ids) {
       c.addId(id);
     }
     return c;
   }
 
-  CANChannel createClientWithIds(std::initializer_list<uint32_t> ids, size_t queue_size = 128) {
-    CANChannel c = createClient(queue_size);
+  VirtualCAN createClientWithIds(std::initializer_list<uint32_t> ids, size_t queue_size = 128) {
+    VirtualCAN c = createClient(queue_size);
     for (auto id : ids) c.addId(id);
     return c;
   }
 
-  CANChannel createClientWithRange(uint32_t start, uint32_t count, size_t queue_size = 128) {
-    CANChannel c = createClient(queue_size);
+  VirtualCAN createClientWithRange(uint32_t start, uint32_t count, size_t queue_size = 128) {
+    VirtualCAN c = createClient(queue_size);
     c.addRange(start, count);
     return c;
   }
 
   /**
      * @brief 物理CANバスをポーリングし、購読しているクライアントにメッセージを分配する。
-     * この関数はCANChannelImpl::available()から自動的に呼び出される。
+     * この関数はVirtualCANImpl::available()から自動的に呼び出される。
      */
   void poll() {
     if (base_ == nullptr) return;
@@ -168,20 +168,20 @@ public:
       CanMsg m = base_->read();
       const uint32_t id = m.id;
 
-      std::set<CANChannelImpl*> recipients;
+      std::set<VirtualCANImpl*> recipients;
 
       auto it = id_subscriptions_.find(id);
       if (it != id_subscriptions_.end()) {
         recipients.insert(it->second.begin(), it->second.end());
       }
 
-      for (CANChannelImpl* c : range_subscription_clients_) {
+      for (VirtualCANImpl* c : range_subscription_clients_) {
         if (c->matchesRange(id)) {
           recipients.insert(c);
         }
       }
 
-      for (CANChannelImpl* c : recipients) {
+      for (VirtualCANImpl* c : recipients) {
         c->push(m);
       }
     }
@@ -194,82 +194,82 @@ public:
   }
 
 private:
-  friend class CANChannelImpl;
-  void subscribeId(uint32_t id, CANChannelImpl* client) {
+  friend class VirtualCANImpl;
+  void subscribeId(uint32_t id, VirtualCANImpl* client) {
     id_subscriptions_[id].push_back(client);
   }
 
-  void subscribeRange(CANChannelImpl* client) {
+  void subscribeRange(VirtualCANImpl* client) {
     range_subscription_clients_.insert(client);
   }
 
   arduino::HardwareCAN* base_ = nullptr;
-  std::vector<std::unique_ptr<CANChannelImpl>> clients_;
-  std::map<uint32_t, std::vector<CANChannelImpl*>> id_subscriptions_;
-  std::set<CANChannelImpl*> range_subscription_clients_;
+  std::vector<std::unique_ptr<VirtualCANImpl>> clients_;
+  std::map<uint32_t, std::vector<VirtualCANImpl*>> id_subscriptions_;
+  std::set<VirtualCANImpl*> range_subscription_clients_;
 };
 
-// --- CANChannel メソッドの実装 ---
-inline CANChannel::CANChannel(CANChannelImpl* client) : client_(client) {}
-inline bool CANChannel::begin(CanBitRate const can_bitrate) {
+// --- VirtualCAN メソッドの実装 ---
+inline VirtualCAN::VirtualCAN(VirtualCANImpl* client) : client_(client) {}
+inline bool VirtualCAN::begin(CanBitRate const can_bitrate) {
   return client_ ? client_->begin(can_bitrate) : false;
 }
-inline void CANChannel::end() noexcept {
+inline void VirtualCAN::end() noexcept {
   if (client_) client_->end();
 }
-inline int CANChannel::write(const CanMsg& msg) {
+inline int VirtualCAN::write(const CanMsg& msg) {
   return client_ ? client_->write(msg) : -1;
 }
-inline size_t CANChannel::available() noexcept {
+inline size_t VirtualCAN::available() noexcept {
   return client_ ? client_->available() : 0;
 }
-inline CanMsg CANChannel::read() noexcept {
+inline CanMsg VirtualCAN::read() noexcept {
   return client_ ? client_->read() : CanMsg{};
 }
-inline void CANChannel::addId(uint32_t id) {
+inline void VirtualCAN::addId(uint32_t id) {
   if (client_) client_->addId(id);
 }
-inline void CANChannel::addRange(uint32_t start, uint32_t count) {
+inline void VirtualCAN::addRange(uint32_t start, uint32_t count) {
   if (client_) client_->addRange(start, count);
 }
-inline void CANChannel::setOverflowPolicy(OverflowPolicy policy) {
+inline void VirtualCAN::setOverflowPolicy(OverflowPolicy policy) {
   if (client_) client_->setOverflowPolicy(policy);
 }
-inline void CANChannel::onQueueOverflow(std::function<void()> callback) {
+inline void VirtualCAN::onQueueOverflow(std::function<void()> callback) {
   if (client_) client_->onQueueOverflow(callback);
 }
 
 
-// --- CANChannelImpl メソッドの実装 ---
-inline void CANChannelImpl::addId(uint32_t id) {
+// --- VirtualCANImpl メソッドの実装 ---
+inline void VirtualCANImpl::addId(uint32_t id) {
   if (hub_) hub_->subscribeId(id, this);
 }
 
-inline void CANChannelImpl::addRange(uint32_t start, uint32_t count) {
+inline void VirtualCANImpl::addRange(uint32_t start, uint32_t count) {
   ranges_.emplace_back(start, start + count);
   if (hub_) hub_->subscribeRange(this);
 }
 
-inline bool CANChannelImpl::begin(CanBitRate const can_bitrate) {
+inline bool VirtualCANImpl::begin(CanBitRate const can_bitrate) {
   (void)can_bitrate;  // "unused parameter" 警告を抑制
   return hub_ != nullptr;
 }
 
-inline void CANChannelImpl::end() noexcept {
+inline void VirtualCANImpl::end() noexcept {
   // no-op
 }
 
-inline int CANChannelImpl::write(const CanMsg& msg) {
+inline int VirtualCANImpl::write(const CanMsg& msg) {
   if (!hub_) return -1;
   return hub_->write(msg);
 }
 
-inline size_t CANChannelImpl::available() noexcept {
+inline size_t VirtualCANImpl::available() noexcept {
   if (hub_) hub_->poll();
   return rxq_.size();
 }
 
-inline CanMsg CANChannelImpl::read() noexcept {
+inline CanMsg VirtualCANImpl::read() noexcept {
   if (rxq_.empty()) return CanMsg{};
   CanMsg m = std::move(rxq_.front());
   rxq_.pop_front();
