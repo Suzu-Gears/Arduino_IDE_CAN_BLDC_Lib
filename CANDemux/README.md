@@ -17,13 +17,27 @@ CAN IDでフィルタリングすることで、1つのCANバスを複数の仮�
 
 ## Installation / インストール
 
+<!--
 ### Arduino IDE Library Manager / Arduino IDE ライブラリマネージャー
 
 1.  Open the Arduino IDE. / Arduino IDE を開きます。
 2.  Go to `Sketch > Include Library > Manage Libraries...`. / `スケッチ > ライブラリをインクルード > ライブラリを管理...` に移動します。
 3.  Search for "CANDemux" and install the latest version. / "CANDemux" を検索し、最新バージョンをインストールします。
+-->
 
 ### Manual Installation / 手動インストール
+
+#### Using Arduino IDE's "Add .ZIP Library" / Arduino IDE の「.ZIPライブラリをインポート」を使用
+
+1.  Download the latest release from the [GitHub repository](https://github.com/Suzu-Gears/CANDemux) as a `.zip` file.
+    *   [GitHubリポジトリ](https://github.com/Suzu-Gears/CANDemux) から最新リリースを `.zip` ファイルでダウンロードします。
+2.  In the Arduino IDE, go to `Sketch > Include Library > Add .ZIP Library...`.
+    *   Arduino IDE で、`スケッチ > ライブラリをインクルード > .ZIPライブラリをインポート...` に移動します。
+3.  Navigate to the downloaded `.zip` file and select it.
+    *   ダウンロードした `.zip` ファイルを選択します。
+4.  Restart the Arduino IDE. / Arduino IDE を再起動します。
+
+#### Direct Placement / 直接配置
 
 1.  Download the latest release from the [GitHub repository](https://github.com/Suzu-Gears/CANDemux).
     *   [GitHubリポジトリ](https://github.com/Suzu-Gears/CANDemux) から最新リリースをダウンロードします。
