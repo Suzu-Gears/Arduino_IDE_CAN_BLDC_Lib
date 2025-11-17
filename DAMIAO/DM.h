@@ -1,14 +1,17 @@
 #ifndef DM_H
 #define DM_H
 
-#include <cstdint>
+#if !__has_include(<api/HardwareCAN.h>)
+#error "DM.h: include a HardwareCAN provider (e.g. <Arduino_CAN.h>, <ESP32_TWAI.h>, <RP2040PIO_CAN.h>)"
+#endif
+
+#include "DMRegister.h"
+
 #include <cstddef>
-#include <map>
 #include <type_traits>
+#include <map>
 
-#include <RP2040PIO_CAN.h>
-
-// --- Enums and Structs ---
+#include <api/HardwareCAN.h>
 
 // モーターの状態
 enum class DM_Status : uint8_t {
