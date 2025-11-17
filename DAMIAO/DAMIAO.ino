@@ -37,6 +37,53 @@ void setup() {
   c6x0.setCAN(&c6x0_vcan);
   dmManager.setCAN(&dm_vcan);
 
+  // --- ここからパラメータ読み書きのサンプルコード ---
+  Serial.println("\n--- Parameter Read/Write Sample ---");
+
+  // 1. uint32_t型パラメータの読み取り (例: 制御モード)
+  uint32_t ctrl_mode_value;
+  if (dmMotorA.readParam<DMR::CTRL_MODE>(ctrl_mode_value)) {
+    Serial.print("Step 1: Motor A - Initial Control Mode (raw): ");
+    Serial.println(ctrl_mode_value);
+  } else {
+    Serial.println("Step 1: Motor A - Failed to read initial Control Mode.");
+  }
+
+  // 2. uint32_t型パラメータの書き込み (例: 制御モードを変更)
+  uint32_t new_mode = 3;  // DM_CM_VEL
+  Serial.print("Step 2: Motor A - Attempting to set Control Mode to: ");
+  Serial.println(new_mode);
+  if (dmMotorA.writeParam<DMR::CTRL_MODE>(new_mode)) {
+    Serial.println("Step 2: Motor A - Successfully sent write command.");
+  } else {
+    Serial.println("Step 2: Motor A - Failed to send write command.");
+  }
+
+  // 3. 書き込んだ値の確認
+  if (dmMotorA.readParam<DMR::CTRL_MODE>(ctrl_mode_value)) {
+    Serial.print("Step 3: Motor A - Successfully read new Control Mode: ");
+    Serial.println(ctrl_mode_value);
+  } else {
+    Serial.println("Step 3: Motor A - Failed to verify new Control Mode.");
+  }
+
+  // 4. 読み取り専用パラメータの読み取り (例: 現在位置)
+  float current_position;
+  if (dmMotorA.readParam<DMR::POSITION>(current_position)) {
+    Serial.print("Step 4: Motor A - Current Position (read-only): ");
+    Serial.println(current_position);
+  } else {
+    Serial.println("Step 4: Motor A - Failed to read current position.");
+  }
+
+  // 5. 読み取り専用パラメータへの書き込み試行 (コンパイルエラーの確認)
+  Serial.println("Step 5: The following line is commented out as it causes a compile-time error.");
+  Serial.println("        (Attempting to write to a read-only parameter)");
+  // dmMotorA.writeParam<DMR::POSITION>(1.23f);  // <- この行のコメントを外すとコンパイルエラーになります
+
+  Serial.println("\n--- End of Parameter Read/Write Sample ---\n");
+  // --- ここまでパラメータ読み書きのサンプルコード ---
+
   // モーター初期化（例）
   dmMotorA.initialize();
   dmMotorB.initialize();
@@ -44,58 +91,6 @@ void setup() {
   dmMotorB.setZeroPoint();
   dmMotorA.enable();
   dmMotorB.enable();
-
-  // --- ここからパラメータ読み書きのサンプルコード ---
-  Serial.println("\n--- Parameter Read/Write Sample ---");
-
-  // 1. float型パラメータの読み取り (例: KPゲイン)
-  float kp_value;
-  if (dmMotorA.readParam(DM_RID::DM_RID_KP, kp_value)) {
-    Serial.print("Motor A - Initial KP: ");
-    Serial.println(kp_value);
-  } else {
-    Serial.println("Motor A - Failed to read initial KP.");
-  }
-
-  // 2. uint32_t型パラメータの読み取り (例: 制御モード)
-  uint32_t ctrl_mode_value;
-  if (dmMotorA.readParam(DM_RID::DM_RID_CTRL_MODE, ctrl_mode_value)) {
-    Serial.print("Motor A - Initial Control Mode (raw): ");
-    Serial.println(ctrl_mode_value);
-  } else {
-    Serial.println("Motor A - Failed to read initial Control Mode.");
-  }
-
-  // 3. float型パラメータの書き込み (例: KPゲインを変更)
-  float new_kp = 30.0f;
-  Serial.print("Motor A - Attempting to set KP to: ");
-  Serial.println(new_kp);
-  if (dmMotorA.writeParam(DM_RID::DM_RID_KP, new_kp)) {
-    Serial.println("Motor A - Successfully set new KP.");
-    // 変更が反映されたか確認のため再読み込み
-    if (dmMotorA.readParam(DM_RID::DM_RID_KP, kp_value)) {
-      Serial.print("Motor A - Confirmed new KP: ");
-      Serial.print(kp_value);
-    }
-  } else {
-    Serial.println("Motor A - Failed to set new KP.");
-  }
-
-  // 4. 読み取り専用パラメータへの書き込み試行 (例: 現在位置)
-  float current_position;
-  if (dmMotorA.readParam(DM_RID::DM_RID_POSITION, current_position)) {
-    Serial.print("Motor A - Current Position (read-only): ");
-    Serial.println(current_position);
-  }
-  Serial.println("Motor A - Attempting to write to read-only POSITION parameter (should fail)...");
-  if (dmMotorA.writeParam(DM_RID::DM_RID_POSITION, 1.23f)) {
-    Serial.println("Motor A - ERROR: Successfully wrote to read-only POSITION!");
-  } else {
-    Serial.println("Motor A - Correctly failed to write to read-only POSITION.");
-  }
-
-  Serial.println("--- End of Parameter Read/Write Sample ---\\n");
-  // --- ここまでパラメータ読み書きのサンプルコード ---
 }
 
 void loop() {

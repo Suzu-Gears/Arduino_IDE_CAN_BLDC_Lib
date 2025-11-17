@@ -57,17 +57,61 @@ enum class DM_ParamType {
   UINT32
 };
 
-// パラメータ情報を格納する構造体
+// パラメータ属性を保持する構造体
 struct DM_ParamInfo {
-  DM_RID rid;
   DM_ParamAccess access;
   DM_ParamType type;
-  const char* name; // デバッグ用
+  const char* name;
 };
+
+// --- コンパイル時型チェックのための定義 ---
+// DM_RID から DM_ParamType へのコンパイル時マッピング
+template<DM_RID Rid>
+struct dm_param_trait;
+
+// 特殊化を定義するためのヘルパーマクロ
+#define DM_PARAM_TRAIT(RID, PARAM_TYPE, ACCESS_TYPE) \
+  template<> struct dm_param_trait<RID> { \
+    static constexpr DM_ParamType type = PARAM_TYPE; \
+    static constexpr DM_ParamAccess access = ACCESS_TYPE; \
+  }
+
+// --- Read/Write Parameters ---
+DM_PARAM_TRAIT(DM_RID::DM_RID_PMAX, DM_ParamType::FLOAT, DM_ParamAccess::READ_WRITE);
+DM_PARAM_TRAIT(DM_RID::DM_RID_VMAX, DM_ParamType::FLOAT, DM_ParamAccess::READ_WRITE);
+DM_PARAM_TRAIT(DM_RID::DM_RID_TMAX, DM_ParamType::FLOAT, DM_ParamAccess::READ_WRITE);
+DM_PARAM_TRAIT(DM_RID::DM_RID_CTRL_MODE, DM_ParamType::UINT32, DM_ParamAccess::READ_WRITE);
+DM_PARAM_TRAIT(DM_RID::DM_RID_KP, DM_ParamType::FLOAT, DM_ParamAccess::READ_WRITE);
+DM_PARAM_TRAIT(DM_RID::DM_RID_KD, DM_ParamType::FLOAT, DM_ParamAccess::READ_WRITE);
+
+// --- Read-Only Parameters ---
+DM_PARAM_TRAIT(DM_RID::DM_RID_POSITION, DM_ParamType::FLOAT, DM_ParamAccess::READ_ONLY);
+DM_PARAM_TRAIT(DM_RID::DM_RID_VELOCITY, DM_ParamType::FLOAT, DM_ParamAccess::READ_ONLY);
+DM_PARAM_TRAIT(DM_RID::DM_RID_TORQUE, DM_ParamType::FLOAT, DM_ParamAccess::READ_ONLY);
+DM_PARAM_TRAIT(DM_RID::DM_RID_TEMP_MOS, DM_ParamType::UINT32, DM_ParamAccess::READ_ONLY);
+DM_PARAM_TRAIT(DM_RID::DM_RID_TEMP_ROTOR, DM_ParamType::UINT32, DM_ParamAccess::READ_ONLY);
+
+#undef DM_PARAM_TRAIT
+
+// DM_RIDの短縮エイリアス用名前空間
+namespace DMR {
+constexpr auto PMAX = DM_RID::DM_RID_PMAX;
+constexpr auto VMAX = DM_RID::DM_RID_VMAX;
+constexpr auto TMAX = DM_RID::DM_RID_TMAX;
+constexpr auto CTRL_MODE = DM_RID::DM_RID_CTRL_MODE;
+constexpr auto KP = DM_RID::DM_RID_KP;
+constexpr auto KD = DM_RID::DM_RID_KD;
+constexpr auto POSITION = DM_RID::DM_RID_POSITION;
+constexpr auto VELOCITY = DM_RID::DM_RID_VELOCITY;
+constexpr auto TORQUE = DM_RID::DM_RID_TORQUE;
+constexpr auto TEMP_MOS = DM_RID::DM_RID_TEMP_MOS;
+constexpr auto TEMP_ROTOR = DM_RID::DM_RID_TEMP_ROTOR;
+}
+
 
 // --- クラス定義 ---
 
-class DMManager; // 前方宣言
+class DMManager;  // 前方宣言
 
 class DMMotor {
 public:
@@ -91,11 +135,11 @@ public:
   bool sendVelocityRPS(float v);
 
   // --- パラメータアクセス (新しい汎用インターフェース) ---
-  template<typename T>
-  bool readParam(DM_RID rid, T& value, uint32_t timeout_ms = 100);
+  template<DM_RID Rid, typename T>
+  bool readParam(T& value, uint32_t timeout_ms = 100);
 
-  template<typename T>
-  bool writeParam(DM_RID rid, T value, uint32_t timeout_ms = 100);
+  template<DM_RID Rid, typename T>
+  bool writeParam(T value, uint32_t timeout_ms = 100);
 
   // --- データ取得 ---
   float getPosition() const;
@@ -161,8 +205,56 @@ private:
   void propagateCANSettings();
 };
 
+// --- テンプレート関数の実装 ---
+// ヘッダーに実装を移動することで、コンパイル時のテンプレート解決を可能にする
+
+template<DM_RID Rid, typename T>
+bool DMMotor::readParam(T& value, uint32_t timeout_ms) {
+  // コンパイル時に型をチェック
+  constexpr DM_ParamType expected_type = dm_param_trait<Rid>::type;
+  if constexpr (std::is_same_v<T, float>) {
+    static_assert(expected_type == DM_ParamType::FLOAT, "Mismatched type for the given RID in readParam. Expected float.");
+  } else if constexpr (std::is_same_v<T, uint32_t>) {
+    static_assert(expected_type == DM_ParamType::UINT32, "Mismatched type for the given RID in readParam. Expected uint32_t.");
+  } else {
+    static_assert(std::is_same_v<T, float> || std::is_same_v<T, uint32_t>, "Unsupported type for readParam. Only float and uint32_t are supported.");
+  }
+
+  // 実行時の処理
+  if constexpr (expected_type == DM_ParamType::FLOAT) {
+    return readParamFloat(Rid, reinterpret_cast<float&>(value), timeout_ms);
+  } else {  // UINT32
+    return readParamUInt32(Rid, reinterpret_cast<uint32_t&>(value), timeout_ms);
+  }
+}
+
+template<DM_RID Rid, typename T>
+bool DMMotor::writeParam(T value, uint32_t timeout_ms) {
+  // コンパイル時に型とアクセス権をチェック
+  constexpr DM_ParamType expected_type = dm_param_trait<Rid>::type;
+  constexpr DM_ParamAccess expected_access = dm_param_trait<Rid>::access;
+
+  static_assert(expected_access == DM_ParamAccess::READ_WRITE, "Write operation is not allowed for this read-only RID.");
+
+  if constexpr (std::is_same_v<T, float>) {
+    static_assert(expected_type == DM_ParamType::FLOAT, "Mismatched type for the given RID in writeParam. Expected float.");
+  } else if constexpr (std::is_same_v<T, uint32_t>) {
+    static_assert(expected_type == DM_ParamType::UINT32, "Mismatched type for the given RID in writeParam. Expected uint32_t.");
+  } else {
+    static_assert(std::is_same_v<T, float> || std::is_same_v<T, uint32_t>, "Unsupported type for writeParam. Only float and uint32_t are supported.");
+  }
+
+  // 実行時の処理
+  if constexpr (expected_type == DM_ParamType::FLOAT) {
+    return sendParamFloat(Rid, static_cast<float>(value), timeout_ms);
+  } else {  // UINT32
+    return sendParamUInt32(Rid, static_cast<uint32_t>(value), timeout_ms);
+  }
+}
+
+
 // パラメータ定義テーブルの宣言
 // C++17 inline static を使えない環境を考慮し、cppファイルで定義
 extern const std::map<DM_RID, DM_ParamInfo> dm_param_definitions;
 
-#endif // DM_H
+#endif  // DM_H

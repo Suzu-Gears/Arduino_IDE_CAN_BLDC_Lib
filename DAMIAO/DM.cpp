@@ -9,20 +9,20 @@
 // パラメータを追加・変更する場合は、ここを編集してください。
 // !!! 注意: RIDは仮の定義です。実際のモーター仕様に合わせてください。
 const std::map<DM_RID, DM_ParamInfo> dm_param_definitions = {
-    // --- Read/Write Parameters ---
-    {DM_RID::DM_RID_PMAX, {DM_RID::DM_RID_PMAX, DM_ParamAccess::READ_WRITE, DM_ParamType::FLOAT, "P_MAX"}},
-    {DM_RID::DM_RID_VMAX, {DM_RID::DM_RID_VMAX, DM_ParamAccess::READ_WRITE, DM_ParamType::FLOAT, "V_MAX"}},
-    {DM_RID::DM_RID_TMAX, {DM_RID::DM_RID_TMAX, DM_ParamAccess::READ_WRITE, DM_ParamType::FLOAT, "T_MAX"}},
-    {DM_RID::DM_RID_CTRL_MODE, {DM_RID::DM_RID_CTRL_MODE, DM_ParamAccess::READ_WRITE, DM_ParamType::UINT32, "CTRL_MODE"}},
-    {DM_RID::DM_RID_KP, {DM_RID::DM_RID_KP, DM_ParamAccess::READ_WRITE, DM_ParamType::FLOAT, "KP"}},
-    {DM_RID::DM_RID_KD, {DM_RID::DM_RID_KD, DM_ParamAccess::READ_WRITE, DM_ParamType::FLOAT, "KD"}},
+  // --- Read/Write Parameters ---
+  { DM_RID::DM_RID_PMAX, { DM_ParamAccess::READ_WRITE, DM_ParamType::FLOAT, "P_MAX" } },
+  { DM_RID::DM_RID_VMAX, { DM_ParamAccess::READ_WRITE, DM_ParamType::FLOAT, "V_MAX" } },
+  { DM_RID::DM_RID_TMAX, { DM_ParamAccess::READ_WRITE, DM_ParamType::FLOAT, "T_MAX" } },
+  { DM_RID::DM_RID_CTRL_MODE, { DM_ParamAccess::READ_WRITE, DM_ParamType::UINT32, "CTRL_MODE" } },
+  { DM_RID::DM_RID_KP, { DM_ParamAccess::READ_WRITE, DM_ParamType::FLOAT, "KP" } },
+  { DM_RID::DM_RID_KD, { DM_ParamAccess::READ_WRITE, DM_ParamType::FLOAT, "KD" } },
 
-    // --- Read-Only Parameters ---
-    {DM_RID::DM_RID_POSITION, {DM_RID::DM_RID_POSITION, DM_ParamAccess::READ_ONLY, DM_ParamType::FLOAT, "POSITION"}},
-    {DM_RID::DM_RID_VELOCITY, {DM_RID::DM_RID_VELOCITY, DM_ParamAccess::READ_ONLY, DM_ParamType::FLOAT, "VELOCITY"}},
-    {DM_RID::DM_RID_TORQUE, {DM_RID::DM_RID_TORQUE, DM_ParamAccess::READ_ONLY, DM_ParamType::FLOAT, "TORQUE"}},
-    {DM_RID::DM_RID_TEMP_MOS, {DM_RID::DM_RID_TEMP_MOS, DM_ParamAccess::READ_ONLY, DM_ParamType::UINT32, "TEMP_MOS"}},       // 仮にUINT32
-    {DM_RID::DM_RID_TEMP_ROTOR, {DM_RID::DM_RID_TEMP_ROTOR, DM_ParamAccess::READ_ONLY, DM_ParamType::UINT32, "TEMP_ROTOR"}}, // 仮にUINT32
+  // --- Read-Only Parameters ---
+  { DM_RID::DM_RID_POSITION, { DM_ParamAccess::READ_ONLY, DM_ParamType::FLOAT, "POSITION" } },
+  { DM_RID::DM_RID_VELOCITY, { DM_ParamAccess::READ_ONLY, DM_ParamType::FLOAT, "VELOCITY" } },
+  { DM_RID::DM_RID_TORQUE, { DM_ParamAccess::READ_ONLY, DM_ParamType::FLOAT, "TORQUE" } },
+  { DM_RID::DM_RID_TEMP_MOS, { DM_ParamAccess::READ_ONLY, DM_ParamType::UINT32, "TEMP_MOS" } },      // 仮にUINT32
+  { DM_RID::DM_RID_TEMP_ROTOR, { DM_ParamAccess::READ_ONLY, DM_ParamType::UINT32, "TEMP_ROTOR" } },  // 仮にUINT32
 };
 
 // =================================================================
@@ -30,8 +30,7 @@ const std::map<DM_RID, DM_ParamInfo> dm_param_definitions = {
 // =================================================================
 
 // --- Private DMMotor Structs ---
-struct DMMotor::Feedback
-{
+struct DMMotor::Feedback {
   DM_Status status = DM_Status::DM_STATUS_DISABLED;
   float position = 0.0f;
   float velocity = 0.0f;
@@ -40,8 +39,7 @@ struct DMMotor::Feedback
   int8_t temp_rotor = 0;
 };
 
-struct DMMotor::MappingRange
-{
+struct DMMotor::MappingRange {
   float pmax = 0.0f;
   float vmax = 0.0f;
   float tmax = 0.0f;
@@ -49,59 +47,49 @@ struct DMMotor::MappingRange
 
 // --- DMMotor Implementations ---
 DMMotor::DMMotor(DMManager *manager, uint32_t slaveId, DM_ControlMode mode)
-    : can_(nullptr), masterId_(0), slaveId_(slaveId), currentMode_(mode), is_initialized_(false)
-{
+  : can_(nullptr), masterId_(0), slaveId_(slaveId), currentMode_(mode), is_initialized_(false) {
   feedback_ = new Feedback();
   mappingrange_ = new MappingRange();
-  if (manager)
-  {
+  if (manager) {
     manager->registerMotor(slaveId, this);
   }
 }
 
-DMMotor::~DMMotor()
-{
+DMMotor::~DMMotor() {
   delete feedback_;
   delete mappingrange_;
 }
 
-void DMMotor::setMasterID(uint32_t masterId)
-{
+void DMMotor::setMasterID(uint32_t masterId) {
   masterId_ = masterId;
 }
 
-void DMMotor::setCAN(arduino::HardwareCAN *can)
-{
+void DMMotor::setCAN(arduino::HardwareCAN *can) {
   can_ = can;
 }
 
-uint8_t DMMotor::getSlaveIdFromMessage(const CanMsg &msg)
-{
+uint8_t DMMotor::getSlaveIdFromMessage(const CanMsg &msg) {
   return msg.data[0] & 0x0F;
 }
 
-void DMMotor::initialize()
-{
+void DMMotor::initialize() {
   if (!can_)
     return;
   // 新しいreadParam関数を使ってパラメータを読み込む
-  bool pmax_ok = readParam(DM_RID::DM_RID_PMAX, mappingrange_->pmax);
-  bool vmax_ok = readParam(DM_RID::DM_RID_VMAX, mappingrange_->vmax);
-  bool tmax_ok = readParam(DM_RID::DM_RID_TMAX, mappingrange_->tmax);
+  bool pmax_ok = readParam<DMR::PMAX>(mappingrange_->pmax);
+  bool vmax_ok = readParam<DMR::VMAX>(mappingrange_->vmax);
+  bool tmax_ok = readParam<DMR::TMAX>(mappingrange_->tmax);
   is_initialized_ = (pmax_ok && vmax_ok && tmax_ok);
-  if (is_initialized_)
-  {
+  if (is_initialized_) {
     setControlMode(currentMode_);
   }
 }
 
-void DMMotor::processMessage(const CanMsg &msg)
-{
+void DMMotor::processMessage(const CanMsg &msg) {
   if (!is_initialized_)
     return;
 
-  if (msg.getStandardId() == masterId_ && (msg.data[0] & 0x0F) == slaveId_)
-  {
+  if (msg.getStandardId() == masterId_ && (msg.data[0] & 0x0F) == slaveId_) {
     feedback_->status = static_cast<DM_Status>((msg.data[0] >> 4) & 0x0F);
     uint16_t pos_raw = (uint16_t)(msg.data[1] << 8 | msg.data[2]);
     uint16_t vel_raw = (uint16_t)((msg.data[3] << 4) | (msg.data[4] >> 4));
@@ -115,134 +103,32 @@ void DMMotor::processMessage(const CanMsg &msg)
   }
 }
 
-void DMMotor::update()
-{
+void DMMotor::update() {
   if (!is_initialized_ || !can_)
     return;
-  while (can_->available())
-  {
+  while (can_->available()) {
     processMessage(can_->read());
   }
 }
 
-bool DMMotor::enable()
-{
+bool DMMotor::enable() {
   return sendSystemCommand(0xFC);
 }
-bool DMMotor::disable()
-{
+bool DMMotor::disable() {
   return sendSystemCommand(0xFD);
 }
-bool DMMotor::setZeroPoint()
-{
+bool DMMotor::setZeroPoint() {
   return sendSystemCommand(0xFE);
 }
 
-void DMMotor::setControlMode(DM_ControlMode mode)
-{
+void DMMotor::setControlMode(DM_ControlMode mode) {
   currentMode_ = mode;
   // 新しいwriteParam関数を使って書き込む
-  writeParam(DM_RID::DM_RID_CTRL_MODE, static_cast<uint32_t>(mode));
+  writeParam<DMR::CTRL_MODE>(static_cast<uint32_t>(mode));
 }
-
-// --- 新しい汎用パラメータアクセス関数 ---
-template <typename T>
-bool DMMotor::readParam(DM_RID rid, T &value, uint32_t timeout_ms)
-{
-  auto it = dm_param_definitions.find(rid);
-  if (it == dm_param_definitions.end())
-  {
-    return false; // 未定義のパラメータ
-  }
-
-  const DM_ParamInfo &info = it->second;
-
-  // 型チェック
-  DM_ParamType expected_type;
-  if (std::is_same<T, float>::value)
-  {
-    expected_type = DM_ParamType::FLOAT;
-  }
-  else if (std::is_same<T, uint32_t>::value)
-  {
-    expected_type = DM_ParamType::UINT32;
-  }
-  else
-  {
-    return false; // サポート外の型
-  }
-
-  if (info.type != expected_type)
-  {
-    return false; // テーブル定義と要求された型が不一致
-  }
-
-  if (info.type == DM_ParamType::FLOAT)
-  {
-    return readParamFloat(rid, reinterpret_cast<float &>(value), timeout_ms);
-  }
-  else
-  { // UINT32
-    return readParamUInt32(rid, reinterpret_cast<uint32_t &>(value), timeout_ms);
-  }
-}
-
-template <typename T>
-bool DMMotor::writeParam(DM_RID rid, T value, uint32_t timeout_ms)
-{
-  auto it = dm_param_definitions.find(rid);
-  if (it == dm_param_definitions.end())
-  {
-    return false; // 未定義のパラメータ
-  }
-
-  const DM_ParamInfo &info = it->second;
-
-  // 書き込み権限チェック
-  if (info.access != DM_ParamAccess::READ_WRITE)
-  {
-    return false; // 読み取り専用パラメータへの書き込みは不可
-  }
-
-  // 型チェック
-  DM_ParamType expected_type;
-  if (std::is_same<T, float>::value)
-  {
-    expected_type = DM_ParamType::FLOAT;
-  }
-  else if (std::is_same<T, uint32_t>::value)
-  {
-    expected_type = DM_ParamType::UINT32;
-  }
-  else
-  {
-    return false; // サポート外の型
-  }
-
-  if (info.type != expected_type)
-  {
-    return false; // テーブル定義と要求された型が不一致
-  }
-
-  if (info.type == DM_ParamType::FLOAT)
-  {
-    return sendParamFloat(rid, static_cast<float>(value), timeout_ms);
-  }
-  else
-  { // UINT32
-    return sendParamUInt32(rid, static_cast<uint32_t>(value), timeout_ms);
-  }
-}
-
-// テンプレート関数の明示的なインスタンス化 (コンパイルエラーを防ぐため)
-template bool DMMotor::readParam<float>(DM_RID, float &, uint32_t);
-template bool DMMotor::readParam<uint32_t>(DM_RID, uint32_t &, uint32_t);
-template bool DMMotor::writeParam<float>(DM_RID, float, uint32_t);
-template bool DMMotor::writeParam<uint32_t>(DM_RID, uint32_t, uint32_t);
 
 // --- 低レベル通信関数 (Private) ---
-bool DMMotor::readParamUInt32(DM_RID r, uint32_t &o, uint32_t t)
-{
+bool DMMotor::readParamUInt32(DM_RID r, uint32_t &o, uint32_t t) {
   if (!can_)
     return false;
   CanMsg tx{};
@@ -255,10 +141,8 @@ bool DMMotor::readParamUInt32(DM_RID r, uint32_t &o, uint32_t t)
   if (can_->write(tx) < 0)
     return false;
   unsigned long s = millis();
-  while (millis() - s < t)
-  {
-    if (can_->available())
-    {
+  while (millis() - s < t) {
+    if (can_->available()) {
       CanMsg rx = can_->read();
       if (rx.getStandardId() != masterId_ || rx.data_length < 8 || rx.data[2] != 0x33 || rx.data[3] != static_cast<uint8_t>(r))
         continue;
@@ -268,16 +152,14 @@ bool DMMotor::readParamUInt32(DM_RID r, uint32_t &o, uint32_t t)
   }
   return false;
 }
-bool DMMotor::readParamFloat(DM_RID r, float &o, uint32_t t)
-{
+bool DMMotor::readParamFloat(DM_RID r, float &o, uint32_t t) {
   uint32_t raw;
   if (!readParamUInt32(r, raw, t))
     return false;
   ::memcpy(&o, &raw, 4);
   return true;
 }
-bool DMMotor::sendParamUInt32(DM_RID r, uint32_t v, uint32_t t)
-{
+bool DMMotor::sendParamUInt32(DM_RID r, uint32_t v, uint32_t t) {
   if (!can_)
     return false;
   CanMsg tx{};
@@ -293,18 +175,18 @@ bool DMMotor::sendParamUInt32(DM_RID r, uint32_t v, uint32_t t)
   tx.data[7] = (v >> 24) & 0xFF;
   if (can_->write(tx) < 0)
     return false;
+
   unsigned long s = millis();
-  while (millis() - s < t)
-  {
-    if (can_->available())
-    {
+  while (millis() - s < t) {
+    if (can_->available()) {
       CanMsg rx = can_->read();
-      if (rx.getStandardId() != masterId_ || rx.data_length < 8 || rx.data[2] != 0x33 || rx.data[3] != static_cast<uint8_t>(r))
+      // Validate the response: check master ID, data length, command ID (0x55 for write ack), and register ID.
+      if (rx.getStandardId() != masterId_ || rx.data_length < 8 || rx.data[2] != 0x55 || rx.data[3] != static_cast<uint8_t>(r))
         continue;
+
       uint32_t ret = (uint32_t)rx.data[4] | ((uint32_t)rx.data[5] << 8) | ((uint32_t)rx.data[6] << 16) | ((uint32_t)rx.data[7] << 24);
       bool ok = (ret == v);
-      if (ok)
-      {
+      if (ok) {
         float vf;
         ::memcpy(&vf, &ret, 4);
         if (r == DM_RID::DM_RID_PMAX)
@@ -319,8 +201,7 @@ bool DMMotor::sendParamUInt32(DM_RID r, uint32_t v, uint32_t t)
   }
   return false;
 }
-bool DMMotor::sendParamFloat(DM_RID r, float v, uint32_t t)
-{
+bool DMMotor::sendParamFloat(DM_RID r, float v, uint32_t t) {
   uint32_t raw;
   ::memcpy(&raw, &v, 4);
   return sendParamUInt32(r, raw, t);
@@ -328,8 +209,7 @@ bool DMMotor::sendParamFloat(DM_RID r, float v, uint32_t t)
 
 // --- 以下、変更のない関数群 (省略せず記載) ---
 
-bool DMMotor::sendSystemCommand(uint8_t cmd)
-{
+bool DMMotor::sendSystemCommand(uint8_t cmd) {
   if (!can_)
     return false;
   CanMsg tx = {};
@@ -340,8 +220,7 @@ bool DMMotor::sendSystemCommand(uint8_t cmd)
   return can_->write(tx) >= 0;
 }
 
-bool DMMotor::sendMIT(float position_rad, float velocity_rad_s, float kp, float kd, float torque_ff)
-{
+bool DMMotor::sendMIT(float position_rad, float velocity_rad_s, float kp, float kd, float torque_ff) {
   if (currentMode_ != DM_ControlMode::DM_CM_MIT)
     return false;
   uint16_t position_raw = floatToUint(position_rad, -getPMAX(), getPMAX(), 16);
@@ -363,8 +242,7 @@ bool DMMotor::sendMIT(float position_rad, float velocity_rad_s, float kp, float 
   return can_->write(tx) >= 0;
 }
 
-bool DMMotor::sendPosition(float position_rad, float velocity_limit_rad_s)
-{
+bool DMMotor::sendPosition(float position_rad, float velocity_limit_rad_s) {
   if (currentMode_ != DM_ControlMode::DM_CM_POS_VEL)
     return false;
   uint32_t position_raw, velocity_raw;
@@ -384,8 +262,7 @@ bool DMMotor::sendPosition(float position_rad, float velocity_limit_rad_s)
   return can_->write(tx) >= 0;
 }
 
-bool DMMotor::sendVelocity(float velocity_rad_s)
-{
+bool DMMotor::sendVelocity(float velocity_rad_s) {
   if (currentMode_ != DM_ControlMode::DM_CM_VEL)
     return false;
   uint32_t raw;
@@ -400,8 +277,7 @@ bool DMMotor::sendVelocity(float velocity_rad_s)
   return can_->write(tx) >= 0;
 }
 
-float DMMotor::uintToFloat(uint16_t x, float min_val, float max_val, int bits)
-{
+float DMMotor::uintToFloat(uint16_t x, float min_val, float max_val, int bits) {
   float span = max_val - min_val;
   if (span == 0.0f)
     return min_val;
@@ -409,8 +285,7 @@ float DMMotor::uintToFloat(uint16_t x, float min_val, float max_val, int bits)
   return normalized * span + min_val;
 }
 
-uint16_t DMMotor::floatToUint(float x, float min_val, float max_val, int bits)
-{
+uint16_t DMMotor::floatToUint(float x, float min_val, float max_val, int bits) {
   float span = max_val - min_val;
   if (span <= 0.0f)
     return 0;
@@ -419,27 +294,55 @@ uint16_t DMMotor::floatToUint(float x, float min_val, float max_val, int bits)
   return (uint16_t)(normalized * ((1 << bits) - 1));
 }
 
-bool DMMotor::sendVelocityRPM(float v) { return sendVelocity(v * PI / 30.0f); }
-bool DMMotor::sendVelocityRPS(float v) { return sendVelocity(v * 2.0f * PI); }
-float DMMotor::getPosition() const { return feedback_->position; }
-float DMMotor::getPositionDeg() const { return feedback_->position * 180.0f / PI; }
-float DMMotor::getVelocity() const { return feedback_->velocity; }
-float DMMotor::getRPM() const { return feedback_->velocity * 30.0f / PI; }
-float DMMotor::getRPS() const { return feedback_->velocity / (2.0f * PI); }
-float DMMotor::getTorque() const { return feedback_->torque; }
-int8_t DMMotor::getMOSTemp() const { return feedback_->temp_mos; }
-int8_t DMMotor::getRotorTemp() const { return feedback_->temp_rotor; }
-uint32_t DMMotor::getSlaveId() const { return slaveId_; }
-DM_Status DMMotor::getStatus() const { return feedback_->status; }
-float DMMotor::getPMAX() const { return abs(mappingrange_->pmax); }
-float DMMotor::getVMAX() const { return abs(mappingrange_->vmax); }
-float DMMotor::getTMAX() const { return abs(mappingrange_->tmax); }
+bool DMMotor::sendVelocityRPM(float v) {
+  return sendVelocity(v * PI / 30.0f);
+}
+bool DMMotor::sendVelocityRPS(float v) {
+  return sendVelocity(v * 2.0f * PI);
+}
+float DMMotor::getPosition() const {
+  return feedback_->position;
+}
+float DMMotor::getPositionDeg() const {
+  return feedback_->position * 180.0f / PI;
+}
+float DMMotor::getVelocity() const {
+  return feedback_->velocity;
+}
+float DMMotor::getRPM() const {
+  return feedback_->velocity * 30.0f / PI;
+}
+float DMMotor::getRPS() const {
+  return feedback_->velocity / (2.0f * PI);
+}
+float DMMotor::getTorque() const {
+  return feedback_->torque;
+}
+int8_t DMMotor::getMOSTemp() const {
+  return feedback_->temp_mos;
+}
+int8_t DMMotor::getRotorTemp() const {
+  return feedback_->temp_rotor;
+}
+uint32_t DMMotor::getSlaveId() const {
+  return slaveId_;
+}
+DM_Status DMMotor::getStatus() const {
+  return feedback_->status;
+}
+float DMMotor::getPMAX() const {
+  return abs(mappingrange_->pmax);
+}
+float DMMotor::getVMAX() const {
+  return abs(mappingrange_->vmax);
+}
+float DMMotor::getTMAX() const {
+  return abs(mappingrange_->tmax);
+}
 
-DM_ControlMode DMMotor::getMode()
-{
+DM_ControlMode DMMotor::getMode() {
   uint32_t raw_mode;
-  if (readParam(DM_RID::DM_RID_CTRL_MODE, raw_mode))
-  {
+  if (readParam<DMR::CTRL_MODE>(raw_mode)) {
     currentMode_ = static_cast<DM_ControlMode>(raw_mode);
   }
   return currentMode_;
@@ -449,54 +352,44 @@ DM_ControlMode DMMotor::getMode()
 // --- DMManager クラス実装 ---
 // =================================================================
 DMManager::DMManager(uint32_t masterId, arduino::HardwareCAN *can_interface)
-    : can_interface_(can_interface), masterId_(masterId)
-{
-  if (can_interface_)
-  {
+  : can_interface_(can_interface), masterId_(masterId) {
+  if (can_interface_) {
     propagateCANSettings();
   }
 }
-void DMManager::setCAN(arduino::HardwareCAN *can_interface)
-{
+void DMManager::setCAN(arduino::HardwareCAN *can_interface) {
   can_interface_ = can_interface;
   propagateCANSettings();
 }
 
-void DMManager::registerMotor(uint32_t slaveId, DMMotor *motor)
-{
+void DMManager::registerMotor(uint32_t slaveId, DMMotor *motor) {
   motors_[slaveId] = motor;
-  if (can_interface_)
-  {
+  if (can_interface_) {
     motor->setMasterID(masterId_);
     motor->setCAN(can_interface_);
   }
 }
 
-void DMManager::propagateCANSettings()
-{
+void DMManager::propagateCANSettings() {
   if (!can_interface_)
     return;
-  for (auto const &[id, motor] : motors_)
-  {
+  for (auto const &[id, motor] : motors_) {
     motor->setMasterID(masterId_);
     motor->setCAN(can_interface_);
   }
 }
 
-void DMManager::update()
-{
+void DMManager::update() {
   if (!can_interface_)
     return;
-  while (can_interface_->available())
-  {
+  while (can_interface_->available()) {
     CanMsg msg = can_interface_->read();
     if (msg.getStandardId() != masterId_)
       continue;
 
     uint8_t slaveId = DMMotor::getSlaveIdFromMessage(msg);
     auto it = motors_.find(slaveId);
-    if (it != motors_.end())
-    {
+    if (it != motors_.end()) {
       it->second->processMessage(msg);
     }
   }
